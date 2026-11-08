@@ -1,0 +1,46 @@
+﻿stamp=20261108-165206
+[topmost/fill=work] [16:52:11.237] [WS] layout(startup) basis=rcWork target=(0,0,1920,1008) actual=(0,0,1920,1008) parent=0x1000C parentOffsetCorrection=(0,0) lastErr=0
+[topmost/fill=work] [16:52:11.240] [WS] monitor[1/1] hm=10001 device=\\.\DISPLAY1 primary=True dpi=144x144 rcMonitor=(0,0,1920,1080)px rcWork=(0,0,1920,1008)px | dipMonitor=(0,0,1280,720) dipWork=(0,0,1280,672)
+[topmost/fill=work] [16:52:11.241] [WS] SPI_GETWORKAREA ok=True rect=(0,0,1920,1008)px dip=(0,0,1280,672) equalCurrentRcWork=True equalPrimaryRcWork=True
+[topmost/fill=work] [16:52:11.244] [WS] taskbar ABM_GETTASKBARPOS ok=True edge=下(3) rect=(0,1008,1920,1080)px
+[topmost/fill=work] [16:52:11.245] [WS] insets(work vs monitor) px: left=0 top=0 right=0 bottom=72 dipBottom=48
+[topmost/fill=work] [16:52:11.246] [WS] verdict(startup) host=(0,0,1920,1008)px layout=铺满工作区(rcWork) bottomOverWork=0px(0dip) desktopMode=False
+[topmost/fill=work] baselineOk=False stripProbe=[h=0x1013A class=Shell_TrayWnd pid=8812 root=0x1013A] aboveProbe=[h=0x170958 class=Microsoft.UI.Content.DesktopChildSiteBridge pid=20488 root=0x4F0B98]
+[topmost/fill=work] dpiScale=0.667 host=(0,0,1920,1008)px rcMonitor=(0,0,1920,1080)px rcWork=(0,0,1920,1008)px taskbar=(x0..1920,y1008..1080)px layout=铺满工作区(rcWork) spiEqual=True
+[topmost/fill=work] redHalf@(960,336) demo=RGB(128,0,0) probe=[h=0x280938 class=WinUI2DemoHost.92031148caf447388be0755a9416380a pid=1956 root=0x280938] expect=RGB(255,127,127) ok=False
+[topmost/fill=work] aboveTaskbar@(640,668) demo=RGB(0,0,0) baseline=RGB(172,101,37) diff=172 probe=[h=0x280938 class=WinUI2DemoHost.92031148caf447388be0755a9416380a pid=1956 root=0x280938] ok=True
+[topmost/fill=work] taskbarStrip@(640,696) demo=RGB(0,0,0) baseline=RGB(16,4,4) diff=16 probe=[h=0x1013A class=Shell_TrayWnd pid=8812 root=0x1013A] expectCovered=False ok=True
+[topmost/fill=desktop] [16:52:23.321] [WS] layout(startup) basis=rcMonitor target=(0,0,1920,1080) actual=(0,0,1920,1080) parent=0x1000C parentOffsetCorrection=(0,0) lastErr=0
+[topmost/fill=desktop] [16:52:23.325] [WS] monitor[1/1] hm=10001 device=\\.\DISPLAY1 primary=True dpi=144x144 rcMonitor=(0,0,1920,1080)px rcWork=(0,0,1920,1008)px | dipMonitor=(0,0,1280,720) dipWork=(0,0,1280,672)
+[topmost/fill=desktop] [16:52:23.327] [WS] SPI_GETWORKAREA ok=True rect=(0,0,1920,1008)px dip=(0,0,1280,672) equalCurrentRcWork=True equalPrimaryRcWork=True
+[topmost/fill=desktop] [16:52:23.335] [WS] taskbar ABM_GETTASKBARPOS ok=True edge=下(3) rect=(0,1008,1920,1080)px
+[topmost/fill=desktop] [16:52:23.336] [WS] insets(work vs monitor) px: left=0 top=0 right=0 bottom=72 dipBottom=48
+[topmost/fill=desktop] [16:52:23.337] [WS] verdict(startup) host=(0,0,1920,1080)px layout=铺满整个桌面(rcMonitor) bottomOverWork=72px(48dip) desktopMode=False
+[topmost/fill=desktop] baselineOk=False stripProbe=[h=0x1013A class=Shell_TrayWnd pid=8812 root=0x1013A] aboveProbe=[h=0x170958 class=Microsoft.UI.Content.DesktopChildSiteBridge pid=20488 root=0x4F0B98]
+[topmost/fill=desktop] dpiScale=0.667 host=(0,0,1920,1080)px rcMonitor=(0,0,1920,1080)px rcWork=(0,0,1920,1008)px taskbar=(x0..1920,y1008..1080)px layout=铺满整个桌面(rcMonitor) spiEqual=True
+[topmost/fill=desktop] redHalf@(960,360) demo=RGB(128,0,0) probe=[h=0x29051A class=WinUI2DemoHost.fdd6f56c62f1492d8797791f57e21ff0 pid=3784 root=0x29051A] expect=RGB(255,127,127) ok=False
+[topmost/fill=desktop] aboveTaskbar@(640,668) demo=RGB(0,0,0) baseline=RGB(195,186,177) diff=195 probe=[h=0x29051A class=WinUI2DemoHost.fdd6f56c62f1492d8797791f57e21ff0 pid=3784 root=0x29051A] ok=True
+[topmost/fill=desktop] taskbarStrip@(640,696) demo=RGB(0,0,0) baseline=RGB(0,0,0) diff=0 probe=[h=0x29051A class=WinUI2DemoHost.fdd6f56c62f1492d8797791f57e21ff0 pid=3784 root=0x29051A] expectCovered=True ok=False
+[desktoppane/fill=work] [16:52:34.772] [WS] layout(startup) basis=rcWork target=(0,0,1920,1008) actual=(0,0,1920,1008) parent=0x1015C parentOffsetCorrection=(0,0) lastErr=0
+[desktoppane/fill=work] [16:52:34.777] [WS] monitor[1/1] hm=10001 device=\\.\DISPLAY1 primary=True dpi=144x144 rcMonitor=(0,0,1920,1080)px rcWork=(0,0,1920,1008)px | dipMonitor=(0,0,1280,720) dipWork=(0,0,1280,672)
+[desktoppane/fill=work] [16:52:34.778] [WS] SPI_GETWORKAREA ok=True rect=(0,0,1920,1008)px dip=(0,0,1280,672) equalCurrentRcWork=True equalPrimaryRcWork=True
+[desktoppane/fill=work] [16:52:34.780] [WS] taskbar ABM_GETTASKBARPOS ok=True edge=下(3) rect=(0,1008,1920,1080)px
+[desktoppane/fill=work] [16:52:34.780] [WS] insets(work vs monitor) px: left=0 top=0 right=0 bottom=72 dipBottom=48
+[desktoppane/fill=work] [16:52:34.781] [WS] verdict(startup) host=(0,0,1920,1008)px layout=铺满工作区(rcWork) bottomOverWork=0px(0dip) desktopMode=True
+[desktoppane/fill=work] baselineOk=False stripProbe=[h=0x1013A class=Shell_TrayWnd pid=8812 root=0x1013A] aboveProbe=[h=0x170958 class=Microsoft.UI.Content.DesktopChildSiteBridge pid=20488 root=0x4F0B98]
+[desktoppane/fill=work] dpiScale=0.667 host=(0,0,1920,1008)px rcMonitor=(0,0,1920,1080)px rcWork=(0,0,1920,1008)px taskbar=(x0..1920,y1008..1080)px layout=铺满工作区(rcWork) spiEqual=True
+[desktoppane/fill=work] redHalf@(960,336) demo=RGB(225,223,224) probe=[h=0x170958 class=Microsoft.UI.Content.DesktopChildSiteBridge pid=20488 root=0x4F0B98] expect=RGB(255,127,127) ok=False
+[desktoppane/fill=work] aboveTaskbar@(640,668) demo=RGB(231,229,234) baseline=RGB(0,0,0) diff=234 probe=[h=0x170958 class=Microsoft.UI.Content.DesktopChildSiteBridge pid=20488 root=0x4F0B98] ok=False
+[desktoppane/fill=work] taskbarStrip@(640,696) demo=RGB(228,226,231) baseline=RGB(0,0,0) diff=231 probe=[h=0x1013A class=Shell_TrayWnd pid=8812 root=0x1013A] expectCovered=False ok=False
+[desktoppane/fill=desktop] [16:52:49.896] [WS] layout(startup) basis=rcMonitor target=(0,0,1920,1080) actual=(0,0,1920,1080) parent=0x1015C parentOffsetCorrection=(0,0) lastErr=0
+[desktoppane/fill=desktop] [16:52:49.900] [WS] monitor[1/1] hm=10001 device=\\.\DISPLAY1 primary=True dpi=144x144 rcMonitor=(0,0,1920,1080)px rcWork=(0,0,1920,1008)px | dipMonitor=(0,0,1280,720) dipWork=(0,0,1280,672)
+[desktoppane/fill=desktop] [16:52:49.901] [WS] SPI_GETWORKAREA ok=True rect=(0,0,1920,1008)px dip=(0,0,1280,672) equalCurrentRcWork=True equalPrimaryRcWork=True
+[desktoppane/fill=desktop] [16:52:49.904] [WS] taskbar ABM_GETTASKBARPOS ok=True edge=下(3) rect=(0,1008,1920,1080)px
+[desktoppane/fill=desktop] [16:52:49.904] [WS] insets(work vs monitor) px: left=0 top=0 right=0 bottom=72 dipBottom=48
+[desktoppane/fill=desktop] [16:52:49.905] [WS] verdict(startup) host=(0,0,1920,1080)px layout=铺满整个桌面(rcMonitor) bottomOverWork=72px(48dip) desktopMode=True
+[desktoppane/fill=desktop] baselineOk=False stripProbe=[h=0x1013A class=Shell_TrayWnd pid=8812 root=0x1013A] aboveProbe=[h=0x170958 class=Microsoft.UI.Content.DesktopChildSiteBridge pid=20488 root=0x4F0B98]
+[desktoppane/fill=desktop] dpiScale=0.667 host=(0,0,1920,1080)px rcMonitor=(0,0,1920,1080)px rcWork=(0,0,1920,1008)px taskbar=(x0..1920,y1008..1080)px layout=铺满整个桌面(rcMonitor) spiEqual=True
+[desktoppane/fill=desktop] redHalf@(960,360) demo=RGB(244,239,233) probe=[h=0x170958 class=Microsoft.UI.Content.DesktopChildSiteBridge pid=20488 root=0x4F0B98] expect=RGB(255,127,127) ok=False
+[desktoppane/fill=desktop] aboveTaskbar@(640,668) demo=RGB(232,229,222) baseline=RGB(34,41,26) diff=198 probe=[h=0x170958 class=Microsoft.UI.Content.DesktopChildSiteBridge pid=20488 root=0x4F0B98] ok=False
+[desktoppane/fill=desktop] taskbarStrip@(640,696) demo=RGB(188,185,178) baseline=RGB(0,0,0) diff=188 probe=[h=0x1013A class=Shell_TrayWnd pid=8812 root=0x1013A] expectCovered=False ok=False
+RESULT failures=4

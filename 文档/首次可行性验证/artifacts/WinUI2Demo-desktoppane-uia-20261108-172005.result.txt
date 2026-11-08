@@ -1,0 +1,13 @@
+mode=desktoppane log=C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\artifacts\WinUI2Demo-desktoppane-uia-20261108-172005.log
+pid=2004 aumid=WinUI2Demo_p06pf12qzbwg4!App
+hostHwnd=0x3409EA
+uia scope: name='WinUI2DemoHost' class='WinUI2DemoHost.d25e38f8e5c04126821e48f0787e1edb'
+foreground: host=1013A expected=3409EA ok=False
+found: goB=True transparency=True fill=True quit=True
+RETRY nav: 首次点击未在 12s 内收到导航，补点一次
+FAIL nav: 未收到 Navigated to PageB
+FAIL transparency: 未收到 toggled 日志
+PASS fill: 点击
+PASS quit: 点击退出成功
+process exited=True
+RESULT mode=desktoppane failures=2

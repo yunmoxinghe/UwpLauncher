@@ -1,0 +1,38 @@
+﻿[16:11:58.663] === WinUI2Demo ===
+[16:11:58.723] pid=14264 os=Microsoft Windows NT 10.0.26300.0
+[16:11:58.725] RoInitialize(STA) => hr=0x00000001
+[16:11:58.881] [PKG] Package.Current fullName=WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4 family=WinUI2Demo_p06pf12qzbwg4
+[16:11:58.957] mode=desktoppane transparent=True selftest=False
+[16:11:59.126] WindowsXamlManager.InitializeForCurrentThread => True
+[16:11:59.130] Window.Current => Windows.UI.Xaml.Window
+[16:11:59.137] CoreWindow.GetForCurrentThread => Windows.UI.Core.CoreWindow
+[16:11:59.146] [CoreWindowInterop] hwnd=0x5F056A
+[16:11:59.323] [WINUI2] XamlControlsResources merged into Application.Resources
+[16:11:59.374] [WINUI2] resource NavigationViewContentBackground => SolidColorBrush color=#80FFFFFF opacity=1
+[16:11:59.394] [WINUI2] resource NavigationViewDefaultBackground lookup failed: COMException
+[16:11:59.394] [WINUI2] resource ApplicationPageBackgroundThemeBrush => SolidColorBrush color=#FFF3F3F3 opacity=1
+[16:11:59.401] [RegisterClass] host atom=49965 lastErr=0
+[16:11:59.406] [CreateWindow] host hwnd=0x330DDA exStyle=0x200080 lastErr=0
+[16:11:59.431] [DWS] created=True
+[16:11:59.443] [DWS] AttachToWindow(host) => 0x00000000
+[16:11:59.443] [DWS] island hwnd=0x3E0DCC
+[16:11:59.682] [PAGE-A] ctor instance=#1 cacheMode=Disabled
+[16:11:59.694] [PAGE-A] OnNavigatedTo #1 mode=New param='start' backStack=0 canGoBack=False
+[16:11:59.711] [DEMO] DemoShell created, content=WinUI2Demo.PageA backStack=0 canGoBack=False
+[16:11:59.713] [DWS] Content set
+[16:11:59.720] [DWS] island sized to 1120x640
+[16:11:59.724] [XST] set_IsBackgroundTransparent(True) => hr=0x00000000 readback=True
+[16:11:59.724] host dpi=144 coreHwnd=0x5F056A xamlHwnd=0x3E0DCC
+[16:11:59.726] [DESK] Progman=0x1015C
+[16:11:59.728] [DESK] Progman children in Z order: SHELLDLL_DefView(0x10160,visible=True,rect=0,0,1920,1080) -> WorkerW(0xF00DAA,visible=True,rect=0,0,1920,1080) -> 
+[16:11:59.729] [HOTKEY] Ctrl+F2=True Ctrl+F3=True Ctrl+F4=True
+[16:11:59.737] [REPARENT] hwnd=0x330DDA oldParent=0x1000C newParent=0x1015C style=0x44000000 exStyle=0x200080 lastErr=0
+[16:11:59.741] [DESKTOPPANE] parent=0x1015C defView=0x10160 hostIsChild=True
+[16:11:59.743] [HITTEST] (640,380) => Chrome_RenderWidgetHostHWND 0x13106AC ours=False root=0x2708F4
+[16:11:59.743] [HITTEST] (220,260) => Chrome_RenderWidgetHostHWND 0x13106AC ours=False root=0x2708F4
+[16:11:59.743] [HITTEST] (1060,260) => Chrome_RenderWidgetHostHWND 0x13106AC ours=False root=0x2708F4
+[16:11:59.743] [DESK] Progman=0x1015C
+[16:11:59.743] [DESK] Progman children in Z order: WinUI2DemoHost.b4998c0e263e4e1fa4efd0567263950c(0x330DDA,visible=True,rect=80,60,1200,700) -> SHELLDLL_DefView(0x10160,visible=True,rect=0,0,1920,1080) -> WorkerW(0xF00DAA,visible=True,rect=0,0,1920,1080) -> 
+[16:11:59.744] [SHOW] hostVisible=True xamlVisible=True
+[16:11:59.745] [RECT] host screen=(80,60,1200,700)
+[16:11:59.745] [RECT] island screen=(80,60,1200,700) root=0x1015C

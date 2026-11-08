@@ -1,0 +1,31 @@
+﻿[16:26:14.664] === WinUI2Demo ===
+[16:26:14.684] pid=8396 os=Microsoft Windows NT 10.0.26300.0
+[16:26:14.685] RoInitialize(STA) => hr=0x00000001
+[16:26:14.740] [PKG] Package.Current fullName=WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4 family=WinUI2Demo_p06pf12qzbwg4
+[16:26:14.769] mode=topmost transparent=True selftest=False
+[16:26:14.847] WindowsXamlManager.InitializeForCurrentThread => True
+[16:26:14.851] Window.Current => Windows.UI.Xaml.Window
+[16:26:14.853] CoreWindow.GetForCurrentThread => Windows.UI.Core.CoreWindow
+[16:26:14.859] [CoreWindowInterop] hwnd=0x410DBE
+[16:26:14.930] [WINUI2] XamlControlsResources merged into Application.Resources
+[16:26:14.952] [WINUI2] resource NavigationViewContentBackground => SolidColorBrush color=#4C3A3A3A opacity=1
+[16:26:14.959] [WINUI2] resource NavigationViewDefaultBackground lookup failed: COMException
+[16:26:14.960] [WINUI2] resource ApplicationPageBackgroundThemeBrush => SolidColorBrush color=#FF202020 opacity=1
+[16:26:14.962] [RegisterClass] host atom=49932 lastErr=0
+[16:26:14.965] [CreateWindow] host hwnd=0x6D06E8 exStyle=0x200088 lastErr=0
+[16:26:14.980] [DWS] created=True
+[16:26:14.987] [DWS] AttachToWindow(host) => 0x00000000
+[16:26:14.987] [DWS] island hwnd=0x600742
+[16:26:15.086] [PAGE-A] ctor instance=#1 cacheMode=Disabled
+[16:26:15.090] [PAGE-A] OnNavigatedTo #1 mode=New param='start' backStack=0 canGoBack=False
+[16:26:15.098] [DEMO] DemoShell created, content=WinUI2Demo.PageA backStack=0 canGoBack=False
+[16:26:15.099] [DWS] Content set
+[16:26:15.100] [DWS] island sized to 1120x640
+[16:26:15.102] [XST] set_IsBackgroundTransparent(True) => hr=0x00000000 readback=True
+[16:26:15.102] host dpi=144 coreHwnd=0x410DBE xamlHwnd=0x600742
+[16:26:15.102] [DESK] Progman=0x1015C
+[16:26:15.103] [DESK] Progman children in Z order: SHELLDLL_DefView(0x10160,visible=True,rect=0,0,1920,1080) -> WorkerW(0x1C0940,visible=True,rect=0,0,1920,1080) -> 
+[16:26:15.105] [SHOW] hostVisible=True xamlVisible=True
+[16:26:15.105] [RECT] host screen=(80,60,1200,700)
+[16:26:15.105] [RECT] island screen=(80,60,1200,700) root=0x6D06E8
+[16:26:15.106] [HOTKEY] Ctrl+F2=True Ctrl+F3=True Ctrl+F4=True

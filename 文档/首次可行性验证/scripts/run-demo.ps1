@@ -8,7 +8,8 @@
   嵌入桌面、回到置顶、关闭），用于打包后的冒烟验证。
 
 .PARAMETER Mode
-  启动时的初始宿主模式：topmost（置顶浮层）/ workerw（嵌入桌面）。
+  启动时的初始宿主模式：topmost（置顶浮层）/ desktoppane（嵌入桌面，DefView 之上，可点击）/
+  workerw（旧路线，WorkerW 壁纸层，点击会被桌面图标视图挡住）。
 
 .PARAMETER Selftest
   自动冒烟测试，约 6 秒后自动退出。
@@ -20,11 +21,15 @@
   非 Selftest 模式下，为了截图而等待的时长（毫秒）。
 #>
 param(
-    [ValidateSet("topmost", "workerw")]
+    [ValidateSet("topmost", "workerw", "desktoppane")]
     [string]$Mode = "topmost",
 
     [ValidateSet("on", "off")]
     [string]$Transparent = "on",
+
+    # 铺满基准：work=铺满工作区（默认）| desktop=铺满整个桌面 | none=固定小窗口
+    [ValidateSet("work", "desktop", "none")]
+    [string]$Fill = "work",
 
     [switch]$Selftest,
 
@@ -98,7 +103,7 @@ if ($Screenshot -or $Selftest) {
     }
 }
 
-$argString = "--mode $Mode --transparent $(if ($Transparent -eq 'on') { '1' } else { '0' }) --log $log"
+$argString = "--mode $Mode --transparent $(if ($Transparent -eq 'on') { '1' } else { '0' }) --fill $Fill --log $log"
 if ($Selftest) { $argString += " --selftest" }
 
 $aumid = "$($pkg.PackageFamilyName)!App"
@@ -123,7 +128,7 @@ if ($Selftest) {
     Start-Sleep -Milliseconds 250
     if ($Screenshot) { Capture-Screen (Join-Path $artifacts "$name-b.png") }
 
-    $workerw = Wait-LogMark "[SELFTEST] mode -> workerw" 8000
+    $workerw = Wait-LogMark "[SELFTEST] mode -> desktoppane" 8000
     Start-Sleep -Milliseconds 500
     if ($Screenshot) {
         # 进入壁纸层后会普通窗口遮挡，最小化其他窗口再截图才能看到它

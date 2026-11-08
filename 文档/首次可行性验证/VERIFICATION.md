@@ -482,7 +482,23 @@ powershell -ExecutionPolicy Bypass -File `
 powershell -ExecutionPolicy Bypass -File `
   "文档/首次可行性验证/scripts/run-probe.ps1" `
   -Probe WinUI2Probe -Mode workerw -Transparent on -Content nav -Packaged
-```
+
+# 5) WinUI2Demo（可交互 demo，含工作区）
+pwsh -ExecutionPolicy Bypass -File `
+  "文档/首次可行性验证/scripts/package-msix.ps1" `
+  -ProjectName WinUI2Demo -PackageName WinUI2Demo
+
+# 交互启动（默认 --fill work，即铺满当前显示器的工作区）
+powershell -ExecutionPolicy Bypass -File `
+  "文档/首次可行性验证/scripts/run-demo.ps1" -Mode desktoppane -Transparent on -Fill work
+
+# 6) 嵌入态输入回归（UIA 定位 + 真实 mouse_event；topmost / desktoppane / workerw）
+pwsh -ExecutionPolicy Bypass -File `
+  "文档/首次可行性验证/scripts/test-input-uia.ps1" -Mode desktoppane
+
+# 7) 工作区铺满范围 + 任务栏遮挡（像素 + WindowFromPoint 双证据，四组组合）
+pwsh -ExecutionPolicy Bypass -File `
+  "文档/首次可行性验证/scripts/test-workspace.ps1"
 
 探针参数：`--mode topmost|plain|workerw`、`--content winui2|grid|nav`、`--transparent 1|0`、`--log <path>`、`--hold <ms>`、`--capture <ms>`、`--navcache 1`（仅 nav，PageA 用 `NavigationCacheMode.Required`）。`run-probe.ps1` 的 `-Packaged` 表示按已注册包的 AUMID 启动，而不是直接执行 exe。
 
@@ -509,6 +525,10 @@ powershell -ExecutionPolicy Bypass -File `
 | [artifacts/msix-install-status.txt](artifacts/msix-install-status.txt) | 打包/安装结果：松散注册、包标识、签名失败原因 |
 | [src/WinUI2Probe/Package.appxmanifest](src/WinUI2Probe/Package.appxmanifest) | MSIX 清单（含 `Microsoft.UI.Xaml.2.8` 框架包依赖） |
 | [scripts/package-msix.ps1](scripts/package-msix.ps1) | 打包/签名/安装脚本 |
+| `artifacts/WinUI2Demo-{topmost,desktoppane,workerw}-uia-20261108-1701*.result.txt` | 嵌入态输入回归：UIA + 真实点击，命中类名/pid 与 PASS/FAIL |
+| `artifacts/workspace-20261108-170057.result.txt` / `-baseline.png` / `workspace-<mode>-<fill>-20261108-170057.*` | 工作区四组组合的日志、截图与判定（`failures=0`） |
+| `artifacts/WinUI2Demo-*-transparent{on,off}-20261108-1703*.png/.log` + `desktop-visible-*.png` | 新布局下透明矩阵与桌面基线（10.5） |
+| [scripts/test-input-uia.ps1](scripts/test-input-uia.ps1) / [scripts/test-workspace.ps1](scripts/test-workspace.ps1) | 输入回归与工作区双证据脚本 |
 | [LEDGER.md](LEDGER.md) | 分阶段台账（含环境、行号、失败与结论） |
 
 ---
@@ -517,8 +537,162 @@ powershell -ExecutionPolicy Bypass -File `
 
 - 结果基于本机 Windows 11 Build 26300 / 150% DPI / 单屏 / 交互式会话；Win10 的 WorkerW 层级不同，WorkerW 部分需按当地窗口树重测。
 - 未使用任何 DWM 属性，且实测证明不需要；但未测试“有其他桌面工具（壁纸引擎、动态壁纸）同时挂 WorkerW”时的冲突。
-- 未验证输入/焦点/命中测试在 WorkerW 子窗中的行为（超出透明判据范围）。
+- 输入/焦点/命中测试已在第 10 节用 UIA 真实点击实测：WorkerW 子窗的点击被 `SHELLDLL_DefView` 接管（4/4 失败）；改用 Progman 子窗 + DefView 之上 Z 序后 4/4 通过。
 - `IsBackgroundTransparent` 按官方文档对**当前线程所有** `DesktopWindowXamlSource` 生效；工程中每个进程只有一个岛，未做多岛对照。
 - WorkerW 中普通 GDI 子窗不参与合成的原因只做了现象级定位（DComp 内容可见、GDI 内容不可见），未进一步下钻 DWM/桌面合成内部实现。
 - WinUI 2 对照实验最初只证明了"未打包宿主无法激活 WinUI 2 控件"；MSIX 打包后已补充验证激活与渲染（第 5 节）。仍未验证的是**已签名 MSIX 的正式安装通道**（受管理员/证书信任限制），以及把 `NavigationViewContentBackground` 改为透明后的纯透明观感。
-- Frame/Page 导航未覆盖：无 `Window.Current` 的岛宿主、无效页面类型的失败码、`Frame` 的 `Enabled` 缓存策略与转场、页面 `OnNavigatingFrom` 取消、多岛/多 Frame 并发、页面内输入与命中测试、WorkerW 子窗中的导航交互（第 6.7 节）。
+- Frame/Page 导航未覆盖：无 `Window.Current` 的岛宿主、无效页面类型的失败码、`Frame` 的 `Enabled` 缓存策略与转场、页面 `OnNavigatingFrom` 取消、多岛/多 Frame 并发。页面内输入已由第 10 节的 UIA 真实点击覆盖；WorkerW 子窗的交互已实测为失效（10.3）。
+
+---
+
+## 10. 嵌入态输入修复（本轮新增）
+
+> 目标：修“`SetParent` 进壁纸层后点不动”。先联网调研根因与成熟方案，再到本机 demo 用 **UIA 定位 + `mouse_event` 真实点击**逐条验证（不以代码自评“应该能点”为结论），同时用同一套像素采样确认透明未被破坏。
+
+### 10.1 调研：输入失效的各种根因与对应修法
+
+| # | 根因 | 机制 | 对应修法 | 依据性质 |
+|---|---|---|---|---|
+| 1 | 命中被桌面图标视图截获 | `SHELLDLL_DefView` 是全屏视图，通常位于 `WorkerW` 之上；挂在 `WorkerW` 里的子窗在 Z 序上永远低于它，`WindowFromPoint` 返回 `SHELLDLL_DefView`，宿主收不到鼠标消息 | 挂 `Progman` 子窗并把宿主 Z 序放到 `DefView` 之上；或改用置顶浮层不进入桌面树 | **本机实测**（本机枚举 + 命中诊断）+ 社区经验；Progman/WorkerW 层级无官方文档（Raymond Chen 的 *The Old New Thing* 有讨论） |
+| 2 | 父窗否决激活 | 官方文档：`DefWindowProc` 在处理前把子窗的 `WM_MOUSEACTIVATE` 交给父窗，由父窗决定是否激活；桌面父窗通常不激活普通子窗 | 宿主自己处理 `WM_MOUSEACTIVATE` 并返回 `MA_ACTIVATE` | **官方文档**（WM_MOUSEACTIVATE 备注） |
+| 3 | 跨线程/跨进程父子窗的输入状态 | 官方：`AttachThreadInput` 让两个线程共享输入状态（键盘状态、当前焦点窗）；跨线程 `SetParent` 合法，但不会自动共享输入队列 | `AttachThreadInput` 到 explorer UI 线程（社区做法）；本机改用路线 C，未使用它 | **官方文档**（AttachThreadInput）+ 官方博客（跨进程父子窗“合法但有代价”） |
+| 4 | `WS_EX_NOACTIVATE` | 官方：窗口被点击时不会成为前台，但仍会收到鼠标消息；适合“永不激活”的浮层，不适合需要键盘/焦点的交互控件 | 交互组件不要加；若必须加，需自己转发激活/焦点 | **官方文档**（扩展窗口样式） |
+| 5 | `WS_EX_TRANSPARENT` | 官方：普通窗口的 `WS_EX_TRANSPARENT` 只影响绘制顺序（要求先绘兄弟），**不影响命中测试**；只有 **分层窗口**（`WS_EX_LAYERED`）带该样式时才会忽略形状、把鼠标事件传给下层。要“点穿”应返回 `HTTRANSPARENT`（`WM_NCHITTEST`） | 静态壁纸才用点穿；交互 demo 必须接收点击，故禁用 | **官方文档**（分层窗口/扩展样式/WM_MOUSEACTIVATE 相关文档），与常见社区误传“WS_EX_TRANSPARENT 让点击穿透”不同 |
+| 6 | Win11 桌面合成 / DWM | 桌面窗口树不是公开 API；本机阶段 3.5 实测：`WorkerW` 中普通 GDI 子窗不参与桌面合成 | 使用 DComp/XAML 宿主，并解决 Z 序（路线 C） | **本机实测 + 社区经验**（无官方文档） |
+| 7 | 样式与 Z 序 | 官方：`SetParent` 不改变 `WS_CHILD/WS_POPUP`；改样式后要 `SetWindowPos(SWP_FRAMECHANGED)`；Z 序用 `SetWindowPos` 调整 | 路线 C 中每次挂父/切模式后重设样式并 `SetWindowPos(HWND_TOP, NOACTIVATE)` | **官方文档**（SetParent / SetWindowPos） |
+
+成熟方案对照（用于判断哪些做法可复用）：
+
+| 方案 | 做法 | 输入表现 | 依据性质 |
+|---|---|---|---|
+| Wallpaper Engine（闭源） | 社区广泛描述为把渲染窗口挂到 `WorkerW`，壁纸本身不要求交互 | 壁纸层不接收点击；桌面图标仍可点 | 社区经验（无源码/官方说明） |
+| Lively Wallpaper（开源） | `WinDesktopCore.cs` 中 `SetParent(handle, workerW)`，并在“raised desktop”模式下用 `SetWindowPos` 调整层序（源码索引可查）；产品 FAQ 宣称交互式壁纸支持鼠标输入 | 说明“能否点”取决于该产品在桌面层的窗口/合成选择，而不是 `SetParent` 本身 | 开源代码索引 + 产品 FAQ |
+| Rainmeter（桌面挂件） | 官方手册提供 “On Desktop” 位置语义（置于桌面、被普通窗口遮挡）；具体实现未在手册展开 | 桌面挂件可交互是其产品目标，但底层细节不可作为可复用文档 | 官方手册（语义）+ 社区经验（实现） |
+| 微软官方示例 DesktopFlyouts | 不用 WorkerW，走**置顶透明浮层**（阶段 1/3.1 已考据） | 输入天然正常，代价是盖住普通窗口/任务栏 | **官方仓库** |
+
+### 10.2 本机实测：UIA 真实点击
+
+判定方式：UIA 按名称找控件 → 光标移到 `BoundingRectangle` 内 → `mouse_event` 左键按下/抬起 → 以 demo 日志里的真实事件（`[NAV]`/`[DEMO]`）判定。每一步同时记录点击坐标下方窗口的类名与 pid。
+
+| 模式 | 导航 | 透明开关 | 铺满桌面开关 | 退出 | 点击下方窗口 | 结果文件 |
+|---|---|---|---|---|---|---|
+| topmost | PASS | PASS | PASS | PASS | 本进程 `WinUI2DemoHost` | `artifacts/WinUI2Demo-topmost-uia-20261108-171957.result.txt` |
+| desktoppane（路线 C） | PASS | PASS | PASS | PASS | 本进程 `WinUI2DemoHost`，`root=Progman 0x1015C` | `artifacts/WinUI2Demo-desktoppane-uia-20261108-172121.result.txt` |
+| workerw（旧路线） | FAIL | FAIL | FAIL | FAIL | `SHELLDLL_DefView 0x10160 pid=8812`（explorer） | `artifacts/WinUI2Demo-workerw-uia-20261108-170219.result.txt` |
+
+- 路线 C 的宿主在 `Progman` 子窗 Z 序最前（`Progman → SHELLDLL_DefView / WorkerW / WinUI2DemoHost`），所以点击真实命中宿主；日志同时有 `[HITTEST]` 与 `[INPUT] WM_MOUSEACTIVATE => MA_ACTIVATE`。
+- workerw 模式下 4 个采样点全部命中 `SHELLDLL_DefView`，demo 日志没有任何 `[NAV]`/`[DEMO]` 事件，证明“消息根本没到宿主线程”，而不是“到了但 XAML 没反应”。
+- **首启时序（如实记录）**：重新注册包后的首次启动（17:17 轮）出现过 nav/quit 在 4 秒等待内没反应的失败，回看日志发现点击消息被延迟约 11 秒才由 XAML 处理（不是丢失）；同一包热启动复跑为 4/4，最终干净回归（17:19/17:21）为 4/4。脚本因此加了“先 `SetForegroundWindow` 并等待前台 + 首步等待 12 秒 + 失败补点一次”，并在每次点击前最小化其他普通窗口。未定位到首启延迟的系统侧确切原因，**仅记录现象，不作为修复结论**。
+
+### 10.3 失效路线与现象（如实记录）
+
+| 路线 | 现象 / 错误码 | 结论 |
+|---|---|---|
+| 挂错父窗（顶层同名 `WorkerW`） | `SetParent` 返回 `lastErr=87`（`ERROR_INVALID_PARAMETER`），窗口被改成无父的 `WS_CHILD` 后不再显示（阶段 3.3 历史证据） | 必须用 `Progman` 的子 `WorkerW`，否则连显示都不成立 |
+| 挂对 `WorkerW`（壁纸层） | `SetParent` 成功（`lastErr=0`），但点击 4/4 失败；命中 `SHELLDLL_DefView` | 透明成立、输入不成立；该路线不适合交互 |
+| `WS_EX_TRANSPARENT` / 返回 `HTTRANSPARENT` | 会把鼠标事件交给下层 | 与“要接收点击”目标相反，未采用（未实测，仅按官方语义排除） |
+| `WH_MOUSE_LL` 低层鼠标钩子转发 | 社区备选路线 | 未实现、未实测；风险（UIPI/注入、坐标与 DPI、钩子超时）仅停留在文献层面，不作为结论 |
+| `AttachThreadInput` 共享输入队列 | 社区常见做法 | 本机路线 C 不需要，未实测；不作为推荐 |
+| 不挂父、仅置顶（路线 E） | 可点击，但铺满 `rcMonitor` 时盖住任务栏（10.2 的 topmost 行 + 11.4 的 `taskbarStrip`） | 可用但不符合“桌面层”定位；作为对照保留 |
+
+### 10.4 推荐方案与理由
+
+**路线 C：`SetParent` 到 `Progman`，宿主 Z 序放到 `SHELLDLL_DefView` 之上；保留 `WS_EX_NOREDIRECTIONBITMAP`；`WM_MOUSEACTIVATE` 返回 `MA_ACTIVATE`。**
+
+理由：
+
+1. 本机 UIA 4/4 通过，重复两轮稳定；透明像素与置顶模式一致（10.5）。
+2. 不引入全局钩子/`AttachThreadInput`，跨进程副作用最小；只依赖“桌面窗口树 + Z 序”这一事实。
+3. 失败可诊断：`[DESK]`/`[HITTEST]` 日志能直接指出命中落在 `SHELLDLL_DefView` 还是宿主。
+
+代价（已实测/已记录）：
+
+- 宿主矩形内的桌面图标不再能被点到（透明区域命中归宿主）。这是“可交互 + 在图标之上一层”的必然取舍。
+- 每次切换“置顶/嵌入”后都要重新套用布局（子窗坐标是父客户区坐标，可能需一次偏移校正）。
+- Win10 或其他 Build 的桌面窗口树可能不同，上线前需按本机方式重测（第 9 节限制不变）。
+
+### 10.5 透明未被破坏（同一套像素复测）
+
+采样点（实现修正后窗口铺满工作区 `(0,0,1920,1008)`，144 DPI）：`(200,300)` 左半透明区、`(1400,300)` 右侧 50% 红、`(700,20)` 顶部控制条（半透明 `#CC1F1F1F`，**不作为壁纸透出判据**，只记录）。
+
+| 模式 | 透明 | (200,300) | (1400,300) | 桌面基线同点 | 判定 |
+|---|---|---|---|---|---|
+| topmost | on | `RGB(4,15,33)` | `RGB(193,5,12)` | `RGB(4,15,33)` / `RGB(131,11,24)` | 左点与基线逐通道一致；右点 `193 ≈ 0.5×255 + 0.5×131`、`5 ≈ 0.5×0 + 0.5×11`、`12 ≈ 0.5×0 + 0.5×24` |
+| topmost | off | `RGB(0,0,0)` | `RGB(128,0,0)` | 同上 | 不透明对照成立 |
+| desktoppane | on | `RGB(4,15,33)` | `RGB(193,5,12)` | 同上 | 与 topmost 完全一致 |
+| desktoppane | off | `RGB(0,0,0)` | `RGB(128,0,0)` | 同上 | 不透明对照成立 |
+
+证据：`artifacts/WinUI2Demo-topmost-transparenton-20261108-170330.*`、`...-transparentoff-20261108-170342.*`、`artifacts/WinUI2Demo-desktoppane-transparenton-20261108-170354.*`、`...-transparentoff-20261108-170410.*`（含截图与日志）；基线 `artifacts/desktop-visible-20261108-170330.png` 等。
+
+> 说明（未完成项）：以上矩阵是在“工作区/输入修复后、最终 Release 重出包前”的构建上采集的。最终包只改了两处：`BuildWorkspaceText` 中“置顶态是否盖住任务栏”的文案改为按真实命中输出、测试脚本（不属于产物）。透明相关代码未改动。按用户要求停止新增测试，最终 Release 上**未再重跑**透明矩阵；一次尝试因截图被 DPI 缩放为 1280×720、采样点 `(1400,300)` 越界而中止，未采到完整数据，**不用于结论**。
+
+---
+
+## 11. 工作区检测与铺满范围（本轮新增）
+
+> 目标：用 `MonitorFromWindow` + `GetMonitorInfo` 取 `rcMonitor`/`rcWork`，与 `SystemParametersInfo(SPI_GETWORKAREA)` 对照；界面可观测；并用截图/命中证明“铺满工作区还是整个桌面”，而不是只报窗口矩形。
+
+### 11.1 实现
+
+- 显示器：`EnumDisplayMonitors` 逐块取 `MONITORINFOEXW`（`rcMonitor`、`rcWork`、`dwFlags`、`szDevice`），`GetDpiForMonitor(MDT_EFFECTIVE_DPI)` 取每块屏 DPI；当前屏用 `MonitorFromWindow(host, MONITOR_DEFAULTTONEAREST)` 匹配。
+- 对照：`SPI_GETWORKAREA` 取系统工作区；`ABM_GETTASKBARPOS` 取任务栏边与矩形；日志逐项比较 `equalCurrentRcWork`/`equalPrimaryRcWork`。
+- 布局基准：默认 **当前显示器的 `rcWork`**，可用 `--fill desktop`（`rcMonitor`）/`--fill none`（固定小窗对照）切换；界面“铺满桌面”开关对应同一逻辑。
+- 刷新：`WM_SETTINGCHANGE`（`wParam=SPI_SETWORKAREA`）、`WM_DISPLAYCHANGE`、`WM_DPICHANGED` 各自重新 `ApplyLayout` + `UpdateWorkspace`。
+- 坐标校正：挂到 `Progman` 后 `SetWindowPos` 的 x/y 是父客户区坐标，写入后用 `GetWindowRect` 复核，按差值再校正一次（日志 `parentOffsetCorrection`）。
+- 界面输出：底部 `WorkspaceText` 显示显示器名/主副屏/像素与 DIP、`rcMonitor`/`rcWork`、`SPI_GETWORKAREA` 对照、任务栏边、布局判定与可见范围说明。
+
+### 11.2 为什么 `SPI_GETWORKAREA` 与 per-monitor `rcWork` 可能不一致（官方语义 + 推断）
+
+1. **多显示器**：`SPI_GETWORKAREA` 只返回**一个** RECT（主屏工作区，屏幕坐标），无法表达副屏任务栏/停靠栏造成的每屏差异；`GetMonitorInfo` 的 `rcWork` 是**逐显示器**的，副屏有任务栏时二者必然不同。官方文档明确 `SPI_GETWORKAREA` 是“工作区”单矩形。
+2. **任务栏/AppBar**：`rcWork` 扣除了该屏上的任务栏与桌面工具栏；`SPI_GETWORKAREA` 只反映主屏。任务栏换到左/上时，主屏 `rcWork` 的 Left/Top 会变，但副屏不会。
+3. **DPI 缩放**：`rcMonitor`/`rcWork` 是物理像素；`SPI_GETWORKAREA` 对 **DPI-unaware** 调用方会做系统级虚拟化（返回虚拟坐标），对 PerMonitorV2 调用方为物理像素。本机 demo 是 PerMonitorV2、144 DPI，两者数值恰好一致；换到 DPI-unaware 宿主或混合 DPI 多屏时可能对不上。**（具体换算规则文档未逐字展开，此处标注为推断，但“DPI 虚拟化会让坐标口径不同”是官方明确的行为框架。）**
+4. **结论**：布局基准取 `MonitorFromWindow` + `GetMonitorInfo` 的 `rcWork`——它跟随窗口所在屏、能表达副屏任务栏、且与 `GetDpiForMonitor` 的 DIP 换算同源；`SPI_GETWORKAREA` 仅作交叉校验与诊断输出。
+
+### 11.3 本机实测数据
+
+```
+monitor[1/1] device=\\.\DISPLAY1 primary=True dpi=144x144
+rcMonitor=(0,0,1920,1080)px  rcWork=(0,0,1920,1008)px
+dipMonitor=(0,0,1280,720)    dipWork=(0,0,1280,672)
+SPI_GETWORKAREA ok=True rect=(0,0,1920,1008)px
+  equalCurrentRcWork=True  equalPrimaryRcWork=True
+taskbar ABM_GETTASKBARPOS ok=True edge=下(3) rect=(0,1008,1920,1080)px
+insets: left=0 top=0 right=0 bottom=72px(48dip)
+```
+
+- 本机只有 1 块显示器（`SM_CMONITORS=1`），且 DPI 150%（`144x144`），1920x1080 物理 → 1280x720 DIP。
+- 日志还输出 `[WS] layout(...) basis=rcWork/rcMonitor target=... actual=... parent=0x1015C(Progman) parentOffsetCorrection=(0,0)`，证明布局落到目标矩形。
+
+### 11.4 可见范围/遮挡实测（像素 + 命中，不只窗口矩形）
+
+四组组合（`--transparent 0` 便于像素判定；`redHalf` 期望 `RGB(128,0,0)`）：
+
+| 组合 | host 矩形 | redHalf | workBottom-6px | 任务栏带内 | 判定 |
+|---|---|---|---|---|---|
+| topmost + fill=work | `(0,0,1920,1008)` | `RGB(128,0,0)`，命中本进程 | `RGB(0,0,0)`，与基线差 252，命中本进程 | 命中 `Shell_TrayWnd`，差 232（宿主在下） | 铺满工作区；任务栏在宿主之上 |
+| topmost + fill=desktop | `(0,0,1920,1080)` | 同上 | 同上 | 命中 `Shell_TrayWnd`（本次；早期一轮曾命中本进程），差 232 | 窗口矩形铺满整个桌面；**任务栏不一定被盖住** |
+| desktoppane + fill=work | `(0,0,1920,1008)` | 同上 | 同上 | 命中 `Shell_TrayWnd`，差 232 | 铺满工作区；任务栏在上 |
+| desktoppane + fill=desktop | `(0,0,1920,1080)` | 同上 | 同上 | 命中 `Shell_TrayWnd`，差 232 | 窗口矩形铺满桌面，但任务栏仍在上；像素被宿主影响（见 11.5） |
+
+证据：`artifacts/workspace-20261108-172144.result.txt` + `workspace-<mode>-<fill>-20261108-172144.png/.log`、基线 `workspace-20261108-172144-baseline.png`；脚本 [scripts/test-workspace.ps1](scripts/test-workspace.ps1)。该轮 `RESULT failures=0`。
+
+> 任务栏覆盖不是稳定成立：宿主与任务栏同为 topmost 时，谁在上取决于激活/Z 序（本轮两次 topmost+fill=desktop 实测：一次命中宿主、一次命中 `Shell_TrayWnd`）。因此 demo 不再断言“置顶态盖住任务栏”，状态文案改为按 `WindowFromPoint` 的实测结果输出。
+
+### 11.5 壁纸层嵌入态下的特殊行为（如实记录）
+
+1. **嵌入态任务栏永远在宿主之上**：即使 `fill=desktop` 把宿主做成 `rcMonitor`，任务栏带内命中仍是 `Shell_TrayWnd`。所以“铺满整个桌面”在嵌入态只是**窗口矩形**铺满，实际可见范围仍被任务栏裁掉 72px；判定文案因此区分“铺满工作区/铺满整个桌面”，并同时给出 `bottomOverWork`。置顶态则不一定：同为 topmost，Z 序可变（11.4）。
+2. **任务栏是 Acrylic，透出下层**：desktoppane + fill=desktop 时任务栏像素由基线 `RGB(22,53,232)` 变为 `RGB(0,0,0)`（差 232，宿主黑底在下），但命中仍是任务栏。故遮挡判定以 `WindowFromPoint` 类名为准，像素差只作参考（此前曾因只看像素而误判）。
+3. **父客户区坐标**：挂到 `Progman` 后 `SetWindowPos` 的 x/y 不是屏幕坐标；本机 `parentOffsetCorrection=(0,0)`，但代码保留复核/校正逻辑，避免在其他 Build 上偏位。
+4. **DIP 基准跟随当前显示器 DPI**：本机 144 DPI 下 `1920x1008px → 1280x672dip`；换屏/改缩放后必须重新取 `GetDpiForMonitor`，不能缓存全局 DPI。
+5. **图标可点性**：输入修复把宿主放到 `DefView` 之上，透明区域也会接收点击；桌面图标在该矩形内不可点（与 10.4 同一取舍）。
+
+### 11.6 覆盖范围与限制
+
+| 项目 | 状态 |
+|---|---|
+| 主屏默认任务栏（底部） | **已实测**（11.3/11.4） |
+| 任务栏换到左/上 | **未实测**：Win11 不支持设置页直接改任务栏位置，需改注册表并重启 explorer，属修改系统设置，本轮不执行；代码按 `rcWork`/`ABM_GETTASKBARPOS` 通用处理 |
+| 多显示器 / 副屏异 DPI | **未覆盖**：本机 `SM_CMONITORS=1`，只有 1 块屏 |
+| 运行中改 DPI / 拔插显示器 | **未覆盖**：无法在不改系统设置的前提下安全触发；已接 `WM_DPICHANGED`/`WM_DISPLAYCHANGE`，未实测 |
+| 任务栏自动隐藏 / 其他 AppBar | **未覆盖**；仅处理 `SPI_SETWORKAREA` 通知 |
+| 与输入修复互不破坏 | **已实测**：desktoppane 模式同时通过 UIA 4/4 与工作区 4 组组合 |

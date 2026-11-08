@@ -1,0 +1,9 @@
+﻿mode=workerw log=C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\artifacts\WinUI2Demo-workerw-uia-20261108-161638.log
+pid=9644 aumid=WinUI2Demo_p06pf12qzbwg4!App
+hostHwnd=0x5A06E8
+uia scope: name='WinUI2DemoHost' class='WinUI2DemoHost.a732ee53c4d949a799019a33a6f328b0'
+found: goB=True transparency=True quit=True
+FAIL nav: 未收到 Navigated to PageB
+FAIL transparency: 未收到 toggled 日志
+FAIL quit: 未收到 close requested
+RESULT mode=workerw failures=3

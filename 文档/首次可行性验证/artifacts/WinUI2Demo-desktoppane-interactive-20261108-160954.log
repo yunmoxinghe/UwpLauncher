@@ -1,0 +1,34 @@
+﻿[16:09:55.579] === WinUI2Demo ===
+[16:09:55.626] pid=16356 os=Microsoft Windows NT 10.0.26300.0
+[16:09:55.628] RoInitialize(STA) => hr=0x00000001
+[16:09:55.739] [PKG] Package.Current fullName=WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4 family=WinUI2Demo_p06pf12qzbwg4
+[16:09:55.783] mode=desktoppane transparent=True selftest=False
+[16:09:55.911] WindowsXamlManager.InitializeForCurrentThread => True
+[16:09:55.917] Window.Current => Windows.UI.Xaml.Window
+[16:09:55.922] CoreWindow.GetForCurrentThread => Windows.UI.Core.CoreWindow
+[16:09:55.931] [CoreWindowInterop] hwnd=0x9E0844
+[16:09:56.065] [WINUI2] XamlControlsResources merged into Application.Resources
+[16:09:56.099] [WINUI2] resource NavigationViewContentBackground => SolidColorBrush color=#80FFFFFF opacity=1
+[16:09:56.115] [WINUI2] resource NavigationViewDefaultBackground lookup failed: COMException
+[16:09:56.116] [WINUI2] resource ApplicationPageBackgroundThemeBrush => SolidColorBrush color=#FFF3F3F3 opacity=1
+[16:09:56.126] [RegisterClass] host atom=49904 lastErr=0
+[16:09:56.133] [CreateWindow] host hwnd=0x23008E exStyle=0x200080 lastErr=0
+[16:09:56.157] [DWS] created=True
+[16:09:56.170] [DWS] AttachToWindow(host) => 0x00000000
+[16:09:56.170] [DWS] island hwnd=0x320DDA
+[16:09:56.365] [PAGE-A] ctor instance=#1 cacheMode=Disabled
+[16:09:56.372] [PAGE-A] OnNavigatedTo #1 mode=New param='start' backStack=0 canGoBack=False
+[16:09:56.388] [DEMO] DemoShell created, content=WinUI2Demo.PageA backStack=0 canGoBack=False
+[16:09:56.389] [DWS] Content set
+[16:09:56.392] [DWS] island sized to 1120x640
+[16:09:56.393] [XST] set_IsBackgroundTransparent(True) => hr=0x00000000 readback=True
+[16:09:56.394] host dpi=144 coreHwnd=0x9E0844 xamlHwnd=0x320DDA
+[16:09:56.394] [DESK] Progman=0x1015C
+[16:09:56.435] FATAL EXCEPTION: System.Runtime.InteropServices.MarshalDirectiveException: Cannot marshal 'parameter #2': Cannot marshal managed types when the runtime marshalling system is disabled.
+   at WinUI2Demo.Program.GetClassName(IntPtr hWnd, StringBuilder lpClassName, Int32 nMaxCount)
+   at WinUI2Demo.Program.ClassNameOf(IntPtr hwnd) in C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\src\WinUI2Demo\Program.cs:line 727
+   at WinUI2Demo.Program.ClassNameOf(HWND hwnd) in C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\src\WinUI2Demo\Program.cs:line 731
+   at WinUI2Demo.Program.LogDesktopStructure() in C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\src\WinUI2Demo\Program.cs:line 690
+   at WinUI2Demo.Program.Run() in C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\src\WinUI2Demo\Program.cs:line 211
+[16:09:56.443] [CLEANUP] DesktopWindowXamlSource disposed
+[16:09:56.445] [CLEANUP] windows destroyed

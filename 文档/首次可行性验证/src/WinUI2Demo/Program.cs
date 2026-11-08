@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -60,6 +61,30 @@ namespace WinUI2Demo
         private const uint WM_HOTKEY = 0x0312u;
         private const uint WM_SPAWN_WORKERW = 0x052Cu;
 
+        // 工作区检测：消息与常量
+        private const uint WM_SETTINGCHANGE = 0x001Au;
+        private const uint WM_DISPLAYCHANGE = 0x007Eu;
+        private const uint WM_DPICHANGED = 0x02E0u;
+        private const uint SPI_GETWORKAREA = 0x0030u;
+        private const uint SPI_SETWORKAREA = 0x002Fu;
+        private const int MONITOR_DEFAULTTONEAREST = 2;
+        private const int MDT_EFFECTIVE_DPI = 0;
+        private const int SM_CMONITORS = 80;
+        private const uint ABM_GETTASKBARPOS = 5u;
+        private const uint MONITORINFOF_PRIMARY = 1u;
+
+        // 输入诊断用：只记录关心的几条，避免 mousemove 刷屏
+        private const uint WM_ACTIVATE = 0x0006u;
+        private const uint WM_SETFOCUS = 0x0007u;
+        private const uint WM_MOUSEACTIVATE = 0x0021u;
+        private const uint WM_SETCURSOR = 0x0020u;
+        private const uint WM_NCHITTEST = 0x0084u;
+        private const uint WM_LBUTTONDOWN = 0x0201u;
+        private const uint WM_LBUTTONUP = 0x0202u;
+        private const uint WM_POINTERDOWN = 0x0246u;
+        private const uint WM_POINTERUP = 0x0247u;
+        private const int MA_ACTIVATE = 1;
+
         private static readonly Guid IID_IDesktopWindowXamlSourceNative2 = new("E3DCD8C7-3057-4692-99C3-7B7720AFDA31");
         private static readonly Guid IID_ICoreWindowInterop = new("45D64A29-A63E-4CB6-B498-5781D298CB4F");
         private static readonly Guid IID_IWindowPrivate = new("06636C29-5A17-458D-8EA2-2422D997A922");
@@ -83,9 +108,97 @@ namespace WinUI2Demo
         private static HWND _xamlHwnd = HWND.Null;
         private static HWND _coreHwnd = HWND.Null;
         private static HWND _workerW = HWND.Null;
+        private static bool _desktoppane;
         private static DesktopWindowXamlSource? _dws;
         private static IDesktopWindowXamlSourceNative2? _native2;
         private static Frame? _frame;
+
+        // 工作区/显示器状态
+        private static readonly List<MonitorInfo> s_monitors = new();
+        private static MonitorInfo? s_currentMonitor;
+        private static string _workspaceText = "工作区: 初始化中…";
+        private static bool _fillDesktop;   // false=铺满 rcWork，true=铺满 rcMonitor
+        private static bool _layoutFixed;   // --fill none：保留测试用的固定小窗口
+        private static RECT32 s_sysWork;
+        private static bool s_sysWorkOk;
+        private static uint s_taskbarEdge = uint.MaxValue;
+        private static RECT32 s_taskbarRect;
+
+        private sealed class MonitorInfo
+        {
+            public nint Handle;
+            public string Device = "";
+            public bool Primary;
+            public RECT32 Monitor;
+            public RECT32 Work;
+            public uint DpiX;
+            public uint DpiY;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT32
+        {
+            public int X;
+            public int Y;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT32
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MONITORINFOEXW
+        {
+            public int cbSize;
+            public RECT32 rcMonitor;
+            public RECT32 rcWork;
+            public uint dwFlags;
+            public fixed char szDevice[32];
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct APPBARDATA
+        {
+            public uint cbSize;
+            public nint hWnd;
+            public uint uCallbackMessage;
+            public uint uEdge;
+            public RECT32 rc;
+            public nint lParam;
+        }
+
+        private delegate bool MonitorEnumProc(nint hMonitor, nint hdc, nint lprcMonitor, nint dwData);
+        private static readonly MonitorEnumProc s_monitorEnum = OnMonitorEnum;
+
+        [DllImport("user32.dll")]
+        private static extern nint WindowFromPoint(POINT32 point);
+
+        [DllImport("user32.dll")]
+        private static extern nint MonitorFromWindow(nint hwnd, uint flags);
+
+        // 项目关闭了运行时封送（DisableRuntimeMarshalling）：全部用 nint 传结构指针
+        [DllImport("user32.dll", EntryPoint = "GetMonitorInfoW")]
+        private static extern bool GetMonitorInfo(nint hMonitor, nint lpmi);
+
+        [DllImport("user32.dll")]
+        private static extern bool EnumDisplayMonitors(nint hdc, nint lprcClip, nint lpfnEnum, nint dwData);
+
+        [DllImport("user32.dll")]
+        private static extern int GetSystemMetrics(int nIndex);
+
+        [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW")]
+        private static extern bool SystemParametersInfo(uint uiAction, uint uiParam, nint pvParam, uint fWinIni);
+
+        [DllImport("shcore.dll")]
+        private static extern int GetDpiForMonitor(nint hMonitor, int dpiType, nint dpiX, nint dpiY);
+
+        [DllImport("shell32.dll")]
+        private static extern nint SHAppBarMessage(uint dwMessage, nint pData);
 
         [DllImport("user32.dll")]
         private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
@@ -144,6 +257,14 @@ namespace WinUI2Demo
             if (!string.IsNullOrEmpty(transparent))
                 _transparent = transparent == "1" || transparent.Equals("true", StringComparison.OrdinalIgnoreCase);
 
+            // --fill work（默认，铺满 rcWork）| desktop（铺满 rcMonitor）| none（固定小窗口，供对照）
+            var fill = GetArgValue(args, "--fill");
+            if (!string.IsNullOrEmpty(fill))
+            {
+                _fillDesktop = fill.Equals("desktop", StringComparison.OrdinalIgnoreCase);
+                _layoutFixed = fill.Equals("none", StringComparison.OrdinalIgnoreCase);
+            }
+
             _selftest = args.Length > 0 && Array.IndexOf(args, "--selftest") >= 0;
         }
 
@@ -180,19 +301,41 @@ namespace WinUI2Demo
 
                 CreateHostWindow();
                 InitializeXamlIsland();
-                ApplyTransparency();
+
+                // 岛一律先以透明态初始化。实测：在子窗嵌入 Progman 的模式下，
+                // 启动阶段就把 IsBackgroundTransparent 置 false 会让整个岛不渲染；
+                // 先把窗口显示出来、再写 false 则正常（与热键切换等价）。
+                TrySetIsBackgroundTransparent(true);
 
                 Log($"host dpi={PInvoke.GetDpiForWindow(_host)} coreHwnd=0x{Hx(_coreHwnd)} xamlHwnd=0x{Hx(_xamlHwnd)}");
 
-                if (_mode == "workerw")
+                LogDesktopStructure();
+
+                if (_mode == "workerw" || _mode == "desktoppane")
                 {
                     RegisterDemoHotkeys();
-                    ReparentToWorkerW();
+                    if (_mode == "workerw")
+                        ReparentToWorkerW();
+                    else
+                        ReparentToDesktopPane();
+
+                    _desktopMode = true;
+                    LogDesktopStructure();
                 }
 
                 ShowWindows();
-                if (_mode != "workerw")
+                if (_mode != "workerw" && _mode != "desktoppane")
                     RegisterDemoHotkeys();
+
+                if (!_transparent)
+                {
+                    // 窗口已可见，此时再写 false 才与热键切换路径一致
+                    ApplyTransparency();
+                    Log("[XST] deferred opaque apply after show");
+                }
+
+                ApplyLayout("startup");
+                UpdateWorkspace("startup");
 
                 RunInteractiveLoop();
             }
@@ -384,6 +527,7 @@ namespace WinUI2Demo
         {
             var sw = Stopwatch.StartNew();
             long lastStatus = -1;
+            long lastZOrder = 0;
             while (!_exitRequested)
             {
                 Pump(16);
@@ -394,6 +538,13 @@ namespace WinUI2Demo
                 {
                     lastStatus = elapsed;
                     UpdateDemoStatus();
+                }
+
+                // explorer 偶尔会重排桌面子窗，定期把宿主重新顶到 DefView 之上
+                if (elapsed - lastZOrder >= 1000)
+                {
+                    lastZOrder = elapsed;
+                    EnsureDesktopPaneZOrder();
                 }
 
                 if (_selftest)
@@ -423,6 +574,16 @@ namespace WinUI2Demo
                 ToggleDesktopMode();
             }
 
+            if (DemoBridge.PendingFillToggle)
+            {
+                DemoBridge.PendingFillToggle = false;
+                _fillDesktop = !_fillDesktop;
+                _layoutFixed = false;
+                Log($"[DEMO] fill toggled => {(_fillDesktop ? "desktop" : "work")}");
+                ApplyLayout("fill-toggle");
+                UpdateWorkspace("fill-toggle");
+            }
+
             if (DemoBridge.PendingClose)
             {
                 DemoBridge.PendingClose = false;
@@ -447,13 +608,14 @@ namespace WinUI2Demo
                 package = "无包标识（直接 exe 启动，WinUI 2 资源不可用）";
             }
 
-            var modeText = _desktopMode ? "嵌入桌面 (WorkerW)" : "置顶浮层";
+            var modeText = _desktoppane ? "嵌入桌面 (DefView 之上)" : _desktopMode ? "嵌入桌面 (WorkerW 壁纸层)" : "置顶浮层";
             var text =
                 $"模式: {modeText}    透明: {(_transparent ? "开" : "关")}    IsBackgroundTransparent={_transparentReadback}\n" +
-                $"页面: {page}    返回栈: {stack}    可返回: {(canBack ? "是" : "否")}\n" +
+                $"页面: {page}    返回栈: {stack}    可返回: {(canBack ? "是" : "否")}    " +
+                $"布局: {(_layoutFixed ? "固定窗口" : _fillDesktop ? "铺满桌面" : "铺满工作区")}\n" +
                 $"包: {package}\n" +
                 "快捷键: Ctrl+F2 透明 | Ctrl+F3 置顶/桌面 | Ctrl+F4 退出";
-            _shell?.UpdateStatus(text, _transparent, _desktopMode);
+            _shell?.UpdateStatus(text, _transparent, _desktopMode, _fillDesktop, _workspaceText);
         }
 
         private static void RegisterDemoHotkeys()
@@ -468,16 +630,8 @@ namespace WinUI2Demo
         {
             if (!_desktopMode)
             {
-                _workerW = FindWorkerW();
-                if (_workerW.IsNull)
-                {
-                    Log("[DEMO] WorkerW not found, stay topmost");
-                    return;
-                }
-
-                ReparentWindow(_host, _workerW, HostX, HostY, HostW, HostH, bottom: false);
+                ReparentToDesktopPane();
                 _desktopMode = true;
-                Log($"[DEMO] mode => workerw parent=0x{Hx(_workerW)} isChild={(bool)PInvoke.IsChild(_workerW, _host)}");
             }
             else
             {
@@ -497,7 +651,12 @@ namespace WinUI2Demo
                     SET_WINDOW_POS_FLAGS.SWP_FRAMECHANGED);
                 _desktopMode = false;
                 Log($"[DEMO] mode => topmost oldParent=0x{Hx(oldParent)} style=0x{style:X} exStyle=0x{exStyle:X} lastErr={Marshal.GetLastWin32Error()}");
+                LogHitTestProbe();
             }
+
+            // 重新挂父后屏幕坐标基准可能变化（子窗坐标是父客户区坐标），重新套用工作区布局
+            ApplyLayout("mode-toggle");
+            UpdateWorkspace("mode-toggle");
         }
 
         /// <summary>
@@ -529,7 +688,7 @@ namespace WinUI2Demo
                     _selftestStep = 4;
                     break;
                 case 4 when elapsed >= 4000:
-                    Log("[SELFTEST] mode -> workerw");
+                    Log("[SELFTEST] mode -> desktoppane");
                     DemoBridge.ToggleMode();
                     _selftestStep = 5;
                     break;
@@ -539,9 +698,19 @@ namespace WinUI2Demo
                     _selftestStep = 6;
                     break;
                 case 6 when elapsed >= 5800:
+                    Log("[SELFTEST] fill -> desktop (rcMonitor)");
+                    DemoBridge.ToggleFill();
+                    _selftestStep = 7;
+                    break;
+                case 7 when elapsed >= 6500:
+                    Log("[SELFTEST] fill -> work (rcWork)");
+                    DemoBridge.ToggleFill();
+                    _selftestStep = 8;
+                    break;
+                case 8 when elapsed >= 7200:
                     Log("[SELFTEST] close");
                     DemoBridge.Close();
-                    _selftestStep = 7;
+                    _selftestStep = 9;
                     break;
             }
         }
@@ -590,6 +759,7 @@ namespace WinUI2Demo
 
         private static void ReparentToWorkerW()
         {
+            _desktoppane = false;
             _workerW = FindWorkerW();
             if (_workerW.IsNull)
             {
@@ -605,6 +775,410 @@ namespace WinUI2Demo
                 SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW);
 
             Log($"[WORKERW] parent=0x{Hx(_workerW)} hostIsChild={(bool)PInvoke.IsChild(_workerW, _host)}");
+            LogHitTestProbe();
+        }
+
+        /// <summary>
+        /// 嵌入态输入的推荐路线：宿主仍挂在桌面窗口树里（Progman 的子窗），但 Z 序放到
+        /// SHELLDLL_DefView 之上。DefView 是全屏视图且位于 WorkerW 之上（本机枚举证实），
+        /// 挂在 WorkerW 里的窗口命中测试永远落到 DefView，鼠标消息到不了宿主；
+        /// 放到 DefView 之上后点击真实命中宿主，而透明区域下方仍是图标与壁纸（视觉不变）。
+        /// </summary>
+        private static void ReparentToDesktopPane()
+        {
+            var progman = PInvoke.FindWindow(S("Progman"), default);
+            if (progman.IsNull)
+            {
+                Log("[DESKTOPPANE] Progman not found, stay topmost");
+                return;
+            }
+
+            var defView = PInvoke.FindWindowEx(progman, HWND.Null, S("SHELLDLL_DefView"), default);
+
+            ReparentWindow(_host, progman, HostX, HostY, HostW, HostH, bottom: false);
+
+            // Progman 子窗 Z 序最前 = 高于 SHELLDLL_DefView；仍受 Progman 约束，不会盖到普通应用
+            PInvoke.SetWindowPos(
+                _host, InsertAfterTop, HostX, HostY, HostW, HostH,
+                SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE |
+                SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW |
+                SET_WINDOW_POS_FLAGS.SWP_FRAMECHANGED);
+
+            _desktoppane = true;
+            Log($"[DESKTOPPANE] parent=0x{Hx(progman)} defView=0x{Hx(defView)} hostIsChild={(bool)PInvoke.IsChild(progman, _host)}");
+            LogHitTestProbe();
+        }
+
+        /// <summary>桌面结构诊断：Progman 子窗按 Z 序列出，解释点击命中谁。</summary>
+        private static void LogDesktopStructure()
+        {
+            var progman = PInvoke.FindWindow(S("Progman"), default);
+            Log($"[DESK] Progman=0x{Hx(progman)}");
+            if (progman.IsNull)
+                return;
+
+            var parts = new StringBuilder();
+            HWND child = PInvoke.FindWindowEx(progman, HWND.Null, default, default);
+            while (!child.IsNull)
+            {
+                RECT r = default;
+                PInvoke.GetWindowRect(child, &r);
+                parts.Append($"{ClassNameOf(child)}(0x{Hx(child)},visible={(bool)PInvoke.IsWindowVisible(child)},rect={r.left},{r.top},{r.right},{r.bottom}) -> ");
+                child = PInvoke.FindWindowEx(progman, child, default, default);
+            }
+
+            Log($"[DESK] Progman children in Z order: {parts}");
+        }
+
+        /// <summary>命中测试诊断：这些坐标上的点击会被谁接收。</summary>
+        private static void LogHitTestProbe()
+        {
+            if (_host.IsNull)
+                return;
+
+            RECT r = default;
+            if (!PInvoke.GetWindowRect(_host, &r) || r.right <= r.left || r.bottom <= r.top)
+                return;
+
+            var probes = new (int X, int Y)[]
+            {
+                ((r.left + r.right) / 2, (r.top + r.bottom) / 2),
+                (r.left + 140, r.top + 200),
+                (r.right - 140, r.top + 200),
+            };
+
+            foreach (var (x, y) in probes)
+            {
+                var hit = WindowFromPoint(new POINT32 { X = x, Y = y });
+                var hitHwnd = new HWND(hit);
+                var ours = hit == (nint)_host.Value || hit == (nint)_xamlHwnd.Value;
+                Log($"[HITTEST] ({x},{y}) => {ClassNameOf(hitHwnd)} 0x{Hx(hitHwnd)} ours={ours} " +
+                    $"root=0x{Hx(PInvoke.GetAncestor(hitHwnd, GET_ANCESTOR_FLAGS.GA_ROOT))}");
+            }
+        }
+
+        private static string ClassNameOf(HWND hwnd)
+        {
+            if (hwnd.IsNull)
+                return "NULL";
+
+            Span<char> buf = stackalloc char[128];
+            fixed (char* p = buf)
+            {
+                var n = PInvoke.GetClassName(hwnd, (PWSTR)p, buf.Length);
+                return n > 0 ? new string(buf[..n]) : "?";
+            }
+        }
+
+        // ---------------- 工作区（显示器 / rcMonitor / rcWork） ----------------
+
+        /// <summary>枚举显示器并选定宿主所在显示器（MonitorFromWindow + GetMonitorInfo）。</summary>
+        private static void EnsureMonitors()
+        {
+            s_monitors.Clear();
+            var fp = Marshal.GetFunctionPointerForDelegate(s_monitorEnum);
+            var ok = EnumDisplayMonitors(nint.Zero, nint.Zero, fp, nint.Zero);
+            var hm = _host.IsNull ? nint.Zero : MonitorFromWindow((nint)_host.Value, MONITOR_DEFAULTTONEAREST);
+
+            s_currentMonitor = null;
+            foreach (var m in s_monitors)
+            {
+                if (m.Handle == hm)
+                {
+                    s_currentMonitor = m;
+                    break;
+                }
+            }
+
+            if (s_currentMonitor is null)
+                s_currentMonitor = FindPrimaryMonitor();
+            if (s_currentMonitor is null && s_monitors.Count > 0)
+                s_currentMonitor = s_monitors[0];
+
+            Log($"[WS] enum monitors ok={ok} count={s_monitors.Count} SM_CMONITORS={GetSystemMetrics(SM_CMONITORS)} " +
+                $"MonitorFromWindow(0x{Hx(_host)},NEAREST)={HexPtr(hm)}");
+        }
+
+        private static bool OnMonitorEnum(nint hMonitor, nint hdc, nint lprcMonitor, nint dwData)
+        {
+            try
+            {
+                var info = QueryMonitor(hMonitor);
+                if (info is not null)
+                    s_monitors.Add(info);
+            }
+            catch
+            {
+                // 回调里抛异常会穿过 user32 栈，直接吞掉
+            }
+
+            return true;
+        }
+
+        private static MonitorInfo? QueryMonitor(nint hMonitor)
+        {
+            var info = default(MONITORINFOEXW);
+            info.cbSize = sizeof(MONITORINFOEXW);
+            if (!GetMonitorInfo(hMonitor, (nint)(void*)&info))
+                return null;
+
+            uint dpiX = 96, dpiY = 96;
+            uint dx = 0, dy = 0;
+            if (GetDpiForMonitor(hMonitor, MDT_EFFECTIVE_DPI, (nint)(void*)&dx, (nint)(void*)&dy) >= 0)
+            {
+                dpiX = dx;
+                dpiY = dy;
+            }
+
+            var mi = new MonitorInfo
+            {
+                Handle = hMonitor,
+                Primary = (info.dwFlags & MONITORINFOF_PRIMARY) != 0,
+                Monitor = info.rcMonitor,
+                Work = info.rcWork,
+                DpiX = dpiX,
+                DpiY = dpiY,
+            };
+
+            // 本地结构体上的固定缓冲区已固定在栈上，可直接取指针（不能再用 fixed 语句）
+            char* p = info.szDevice;
+            var len = 0;
+            while (len < 32 && p[len] != '\0')
+                len++;
+            mi.Device = len > 0 ? new string(p, 0, len) : "?";
+
+            return mi;
+        }
+
+        private static MonitorInfo? FindPrimaryMonitor()
+        {
+            foreach (var m in s_monitors)
+            {
+                if (m.Primary)
+                    return m;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 按工作区（rcWork）或整块桌面（rcMonitor）套用宿主矩形。
+        /// 嵌入桌面时宿主是 Progman 的子窗，SetWindowPos 的 x/y 是父客户区坐标，
+        /// 所以写入后再用 GetWindowRect 复核，按差值校正一次（不假设父窗原点 = 屏幕原点）。
+        /// </summary>
+        private static void ApplyLayout(string reason)
+        {
+            if (_layoutFixed || _host.IsNull)
+            {
+                Log($"[WS] layout({reason}) skipped (fill=none or host null)");
+                return;
+            }
+
+            EnsureMonitors();
+            var m = s_currentMonitor;
+            if (m is null)
+            {
+                Log($"[WS] layout({reason}) skipped: no monitor info");
+                return;
+            }
+
+            var target = _fillDesktop ? m.Monitor : m.Work;
+            var w = target.Right - target.Left;
+            var h = target.Bottom - target.Top;
+
+            PInvoke.SetWindowPos(_host, InsertAfterTop, target.Left, target.Top, w, h,
+                SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW);
+
+            var actual = HostRect();
+            var dx = target.Left - actual.Left;
+            var dy = target.Top - actual.Top;
+            if (dx != 0 || dy != 0)
+            {
+                PInvoke.SetWindowPos(_host, InsertAfterTop, target.Left + dx, target.Top + dy, w, h,
+                    SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW);
+                actual = HostRect();
+            }
+
+            var parent = PInvoke.GetAncestor(_host, GET_ANCESTOR_FLAGS.GA_PARENT);
+            Log($"[WS] layout({reason}) basis={(_fillDesktop ? "rcMonitor" : "rcWork")} target={Rect(target)} " +
+                $"actual={Rect(actual)} parent=0x{Hx(parent)} parentOffsetCorrection=({dx},{dy}) " +
+                $"lastErr={Marshal.GetLastWin32Error()}");
+
+            LogRects();
+        }
+
+        /// <summary>
+        /// 采集并输出工作区信息：每块显示器的 rcMonitor/rcWork（像素 + DIP）、
+        /// SPI_GETWORKAREA 对照、任务栏位置、本次布局判定，以及“实际可见范围”的命中/像素证据。
+        /// </summary>
+        private static void UpdateWorkspace(string reason)
+        {
+            EnsureMonitors();
+
+            for (var i = 0; i < s_monitors.Count; i++)
+            {
+                var mi = s_monitors[i];
+                Log($"[WS] monitor[{i + 1}/{s_monitors.Count}] hm={HexPtr(mi.Handle)} device={mi.Device} " +
+                    $"primary={mi.Primary} dpi={mi.DpiX}x{mi.DpiY} " +
+                    $"rcMonitor={Rect(mi.Monitor)}px rcWork={Rect(mi.Work)}px | " +
+                    $"dipMonitor={DipRect(mi.Monitor, mi.DpiX)} dipWork={DipRect(mi.Work, mi.DpiX)}");
+            }
+
+            RECT32 sysWork = default;
+            s_sysWorkOk = SystemParametersInfo(SPI_GETWORKAREA, 0, (nint)(void*)&sysWork, 0);
+            s_sysWork = sysWork;
+            var cur = s_currentMonitor;
+            var primary = FindPrimaryMonitor();
+            Log($"[WS] SPI_GETWORKAREA ok={s_sysWorkOk} rect={Rect(s_sysWork)}px " +
+                $"dip={(cur is null ? "-" : DipRect(s_sysWork, cur.DpiX))} " +
+                $"equalCurrentRcWork={(cur is not null && SameRect(s_sysWork, cur.Work))} " +
+                $"equalPrimaryRcWork={(primary is not null && SameRect(s_sysWork, primary.Work))}");
+
+            var abd = default(APPBARDATA);
+            abd.cbSize = (uint)sizeof(APPBARDATA);
+            var abmOk = SHAppBarMessage(ABM_GETTASKBARPOS, (nint)(void*)&abd) != 0;
+            s_taskbarEdge = abd.uEdge;
+            s_taskbarRect = abd.rc;
+            Log($"[WS] taskbar ABM_GETTASKBARPOS ok={abmOk} edge={EdgeName(abd.uEdge)}({abd.uEdge}) " +
+                $"rect={Rect(abd.rc)}px");
+
+            if (cur is not null)
+            {
+                Log($"[WS] insets(work vs monitor) px: left={cur.Work.Left - cur.Monitor.Left} " +
+                    $"top={cur.Work.Top - cur.Monitor.Top} right={cur.Monitor.Right - cur.Work.Right} " +
+                    $"bottom={cur.Monitor.Bottom - cur.Work.Bottom} " +
+                    $"dipBottom={Dip(cur.Monitor.Bottom - cur.Work.Bottom, cur.DpiX)}");
+            }
+
+            LogLayoutVerdict(reason);
+            _workspaceText = BuildWorkspaceText();
+            Log($"[WS] text => {_workspaceText.Replace("\n", " | ")}");
+        }
+
+        /// <summary>布局判定 + 可见范围证据（命中测试与真实像素，不只报窗口矩形）。</summary>
+        private static void LogLayoutVerdict(string reason)
+        {
+            var m = s_currentMonitor;
+            if (m is null || _host.IsNull)
+                return;
+
+            RECT32 host = HostRect();
+            var kind = SameRect(host, m.Monitor) ? "铺满整个桌面(rcMonitor)"
+                     : SameRect(host, m.Work) ? "铺满工作区(rcWork)"
+                     : "自定义";
+            var overlap = Math.Max(0, host.Bottom - m.Work.Bottom);
+            Log($"[WS] verdict({reason}) host={Rect(host)}px layout={kind} " +
+                $"bottomOverWork={overlap}px({Dip(overlap, m.DpiX)}dip) desktopMode={_desktopMode}");
+
+            var cx = (host.Left + host.Right) / 2;
+            ProbeHit("workBottom-10", cx, m.Work.Bottom - 10);
+            ProbeHit("workBottom+10", cx, m.Work.Bottom + 10);
+        }
+
+        private static void ProbeHit(string label, int x, int y)
+        {
+            var hit = WindowFromPoint(new POINT32 { X = x, Y = y });
+            var hwnd = new HWND(hit);
+            var root = PInvoke.GetAncestor(hwnd, GET_ANCESTOR_FLAGS.GA_ROOT);
+            var ours = hit == (nint)_host.Value || hit == (nint)_xamlHwnd.Value;
+            Log($"[WS] hit({label}) ({x},{y}) => {ClassNameOf(hwnd)} 0x{Hx(hwnd)} ours={ours} root=0x{Hx(root)}");
+        }
+
+        private static string BuildWorkspaceText()
+        {
+            var m = s_currentMonitor;
+            if (m is null)
+                return "工作区: 无显示器信息";
+
+            RECT32 host = HostRect();
+
+            var kind = SameRect(host, m.Monitor) ? "铺满整个桌面"
+                     : SameRect(host, m.Work) ? "铺满工作区"
+                     : "自定义（固定窗口）";
+            string visible;
+            if (_desktopMode)
+            {
+                visible = "嵌入态：宿主在桌面窗口树内，任务栏/普通应用都在其上方 → 可见范围≈工作区";
+            }
+            else
+            {
+                // 置顶态与任务栏同为 topmost，谁在上取决于 Z 序；用真实命中给出本次结果
+                var probeY = Math.Min(m.Monitor.Bottom - 4, m.Work.Bottom + 4);
+                nint hit = WindowFromPoint(new POINT32 { X = (m.Work.Left + m.Work.Right) / 2, Y = probeY });
+                var ours = hit == (nint)_host.Value || hit == (nint)_xamlHwnd.Value;
+                visible = ours
+                    ? "置顶态：宿主为 topmost，任务栏区域命中宿主 → 可见范围=宿主矩形"
+                    : "置顶态：宿主为 topmost，但任务栏仍在最上层 → 可见范围≈工作区";
+            }
+
+            return
+                $"显示器: {m.Device}（{(m.Primary ? "主屏" : "副屏")}）" +
+                $"{RWidth(m.Monitor)}x{RHeight(m.Monitor)}px @{m.DpiX}DPI → " +
+                $"{Dip(RWidth(m.Monitor), m.DpiX)}x{Dip(RHeight(m.Monitor), m.DpiX)}DIP\n" +
+                $"rcMonitor={Rect(m.Monitor)}px{ToDip(m.Monitor, m.DpiX)} rcWork={Rect(m.Work)}px{ToDip(m.Work, m.DpiX)}\n" +
+                $"SPI_GETWORKAREA={Rect(s_sysWork)}px ok={s_sysWorkOk} 与当前屏rcWork一致={SameRect(s_sysWork, m.Work)} " +
+                $"任务栏边={EdgeName(s_taskbarEdge)} rect={Rect(s_taskbarRect)}px\n" +
+                $"本次布局: {kind}（host={Rect(host)}px）；{visible}";
+        }
+
+        private static string ToDip(RECT32 r, uint dpi) =>
+            $" / {(int)Math.Round(r.Left * 96.0 / SafeDpi(dpi))},{(int)Math.Round(r.Top * 96.0 / SafeDpi(dpi))}," +
+            $"{(int)Math.Round(r.Right * 96.0 / SafeDpi(dpi))},{(int)Math.Round(r.Bottom * 96.0 / SafeDpi(dpi))}DIP";
+
+        private static string DipRect(RECT32 r, uint dpi) => $"({ToDipInner(r, dpi)})";
+
+        private static string ToDipInner(RECT32 r, uint dpi)
+        {
+            var k = 96.0 / SafeDpi(dpi);
+            return $"{(int)Math.Round(r.Left * k)},{(int)Math.Round(r.Top * k)}," +
+                   $"{(int)Math.Round(r.Right * k)},{(int)Math.Round(r.Bottom * k)}";
+        }
+
+        private static int Dip(int px, uint dpi) => (int)Math.Round(px * 96.0 / SafeDpi(dpi));
+
+        private static uint SafeDpi(uint dpi) => dpi == 0 ? 96 : dpi;
+
+        private static string Rect(RECT32 r) => $"({r.Left},{r.Top},{r.Right},{r.Bottom})";
+
+        /// <summary>宿主窗口的屏幕矩形（GetWindowRect 走 CsWin32 的 RECT，这里转成本文件用的 RECT32）。</summary>
+        private static RECT32 HostRect()
+        {
+            RECT r = default;
+            if (!_host.IsNull)
+                PInvoke.GetWindowRect(_host, &r);
+            return new RECT32 { Left = r.left, Top = r.top, Right = r.right, Bottom = r.bottom };
+        }
+
+        private static int RWidth(RECT32 r) => r.Right - r.Left;
+
+        private static int RHeight(RECT32 r) => r.Bottom - r.Top;
+
+        private static bool SameRect(RECT32 a, RECT32 b) =>
+            a.Left == b.Left && a.Top == b.Top && a.Right == b.Right && a.Bottom == b.Bottom;
+
+        private static string EdgeName(uint edge) => edge switch
+        {
+            0 => "左",
+            1 => "上",
+            2 => "右",
+            3 => "下",
+            _ => "未知",
+        };
+
+        private static string HexPtr(nint value) => value == 0 ? "0" : ((long)value).ToString("X");
+
+        /// <summary>explorer 重新排列桌面子窗时把宿主重新顶到 DefView 之上。</summary>
+        private static void EnsureDesktopPaneZOrder()
+        {
+            if (!_desktopMode || !_desktoppane || _host.IsNull)
+                return;
+
+            PInvoke.SetWindowPos(
+                _host, InsertAfterTop, 0, 0, 0, 0,
+                SET_WINDOW_POS_FLAGS.SWP_NOMOVE |
+                SET_WINDOW_POS_FLAGS.SWP_NOSIZE |
+                SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE |
+                SET_WINDOW_POS_FLAGS.SWP_NOOWNERZORDER);
         }
 
         private static HWND FindWorkerW()
@@ -678,7 +1252,7 @@ namespace WinUI2Demo
 
         private static void ShowWindows()
         {
-            if (_mode != "workerw")
+            if (!_desktopMode)
             {
                 PInvoke.SetWindowPos(
                     _host, InsertAfterTop, HostX, HostY, HostW, HostH,
@@ -716,6 +1290,8 @@ namespace WinUI2Demo
                     if (msg.message == WM_QUIT)
                         return;
 
+                    LogInputMessage(&msg);
+
                     BOOL handled = false;
                     if (_native2 is not null)
                     {
@@ -740,6 +1316,21 @@ namespace WinUI2Demo
             }
         }
 
+        /// <summary>
+        /// 输入诊断：记录消息队列里收到的鼠标/激活消息。用来区分
+        /// “消息根本没到线程”（被桌面 DefView 挡住）与“到了但 XAML 没反应”。
+        /// </summary>
+        private static void LogInputMessage(MSG* msg)
+        {
+            uint id = msg->message;
+            if (id != WM_LBUTTONDOWN && id != WM_LBUTTONUP && id != WM_MOUSEACTIVATE &&
+                id != WM_NCHITTEST && id != WM_ACTIVATE && id != WM_SETFOCUS && id != WM_SETCURSOR &&
+                id != WM_POINTERDOWN && id != WM_POINTERUP)
+                return;
+
+            Log($"[INPUT] msg=0x{id:X4} hwnd=0x{Hx(msg->hwnd)} lParam=0x{(long)msg->lParam.Value:X}");
+        }
+
         private static LRESULT WndProc(HWND hWnd, uint uMsg, WPARAM wParam, LPARAM lParam)
         {
             switch (uMsg)
@@ -761,6 +1352,12 @@ namespace WinUI2Demo
                         PInvoke.SendMessage(_coreHwnd, WM_SIZE, wParam, lParam);
                     break;
 
+                case WM_MOUSEACTIVATE:
+                    // 子窗口的 WM_MOUSEACTIVATE 默认会交给父窗口（Progman/explorer）裁决，
+                    // 桌面父窗通常不希望激活任何东西。这里自己返回 MA_ACTIVATE，保证点击后激活。
+                    Log($"[INPUT] WM_MOUSEACTIVATE on host hwnd=0x{Hx(hWnd)} => MA_ACTIVATE");
+                    return (LRESULT)MA_ACTIVATE;
+
                 case WM_HOTKEY:
                     switch ((int)wParam.Value)
                     {
@@ -775,6 +1372,28 @@ namespace WinUI2Demo
                             break;
                     }
                     return default;
+
+                case WM_SETTINGCHANGE:
+                    // wParam 是 SPI_ 动作：任务栏移动/尺寸变化会带 SPI_SETWORKAREA
+                    if (wParam.Value == SPI_SETWORKAREA)
+                    {
+                        Log("[WS] WM_SETTINGCHANGE(SPI_SETWORKAREA) => refresh");
+                        ApplyLayout("settingchange");
+                        UpdateWorkspace("settingchange");
+                    }
+                    break;
+
+                case WM_DISPLAYCHANGE:
+                    Log($"[WS] WM_DISPLAYCHANGE bpp={wParam.Value} size={(int)(lParam.Value & 0xFFFF)}x{(int)((lParam.Value >> 16) & 0xFFFF)}");
+                    ApplyLayout("displaychange");
+                    UpdateWorkspace("displaychange");
+                    break;
+
+                case WM_DPICHANGED:
+                    Log($"[WS] WM_DPICHANGED newDpi={wParam.Value & 0xFFFF}x{(wParam.Value >> 16) & 0xFFFF}");
+                    ApplyLayout("dpichanged");
+                    UpdateWorkspace("dpichanged");
+                    break;
 
                 case WM_DESTROY:
                     _exitRequested = true;

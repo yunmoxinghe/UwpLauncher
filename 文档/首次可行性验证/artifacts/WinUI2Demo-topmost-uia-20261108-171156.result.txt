@@ -1,0 +1,11 @@
+mode=topmost log=C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\artifacts\WinUI2Demo-topmost-uia-20261108-171156.log
+pid=18460 aumid=WinUI2Demo_p06pf12qzbwg4!App
+hostHwnd=0x1309B8
+uia scope: name='WinUI2DemoHost' class='WinUI2DemoHost.984cfa5f4a064707b6e3112bf094e521'
+found: goB=True transparency=True fill=True quit=True
+FAIL nav: 未收到 Navigated to PageB
+FAIL transparency: 未收到 toggled 日志
+FAIL fill: 未收到 fill toggled 日志
+PASS quit: 点击退出成功
+process exited=True
+RESULT mode=topmost failures=3

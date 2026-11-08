@@ -1,0 +1,46 @@
+﻿[16:52:18.988] === WinUI2Demo ===
+[16:52:19.030] pid=1956 os=Microsoft Windows NT 10.0.26300.0
+[16:52:19.031] RoInitialize(STA) => hr=0x00000001
+[16:52:19.122] [PKG] Package.Current fullName=WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4 family=WinUI2Demo_p06pf12qzbwg4
+[16:52:19.259] mode=topmost transparent=False selftest=False
+[16:52:19.543] WindowsXamlManager.InitializeForCurrentThread => True
+[16:52:19.555] Window.Current => Windows.UI.Xaml.Window
+[16:52:19.566] CoreWindow.GetForCurrentThread => Windows.UI.Core.CoreWindow
+[16:52:19.582] [CoreWindowInterop] hwnd=0x470634
+[16:52:19.735] [WINUI2] XamlControlsResources merged into Application.Resources
+[16:52:19.808] [WINUI2] resource NavigationViewContentBackground => SolidColorBrush color=#4C3A3A3A opacity=1
+[16:52:19.833] [WINUI2] resource NavigationViewDefaultBackground lookup failed: COMException
+[16:52:19.834] [WINUI2] resource ApplicationPageBackgroundThemeBrush => SolidColorBrush color=#FF202020 opacity=1
+[16:52:19.839] [RegisterClass] host atom=49970 lastErr=0
+[16:52:19.848] [CreateWindow] host hwnd=0x280938 exStyle=0x200088 lastErr=0
+[16:52:19.888] [DWS] created=True
+[16:52:19.905] [DWS] AttachToWindow(host) => 0x00000000
+[16:52:19.906] [DWS] island hwnd=0x5E008E
+[16:52:20.065] [PAGE-A] ctor instance=#1 cacheMode=Disabled
+[16:52:20.071] [PAGE-A] OnNavigatedTo #1 mode=New param='start' backStack=0 canGoBack=False
+[16:52:20.087] [DEMO] DemoShell created, content=WinUI2Demo.PageA backStack=0 canGoBack=False
+[16:52:20.089] [DWS] Content set
+[16:52:20.092] [DWS] island sized to 1120x640
+[16:52:20.095] [XST] set_IsBackgroundTransparent(True) => hr=0x00000000 readback=True
+[16:52:20.095] host dpi=144 coreHwnd=0x470634 xamlHwnd=0x5E008E
+[16:52:20.096] [DESK] Progman=0x1015C
+[16:52:20.098] [DESK] Progman children in Z order: SHELLDLL_DefView(0x10160,visible=True,rect=0,0,1920,1080) -> WorkerW(0x38095E,visible=True,rect=0,0,1920,1080) -> 
+[16:52:20.101] [SHOW] hostVisible=True xamlVisible=True
+[16:52:20.102] [RECT] host screen=(80,60,1200,700)
+[16:52:20.102] [RECT] island screen=(80,60,1200,700) root=0x280938
+[16:52:20.102] [HOTKEY] Ctrl+F2=True Ctrl+F3=True Ctrl+F4=True
+[16:52:20.103] [XST] set_IsBackgroundTransparent(False) => hr=0x00000000 readback=False
+[16:52:20.103] [XST] deferred opaque apply after show
+[16:52:20.107] [WS] enum monitors ok=True count=1 SM_CMONITORS=1 MonitorFromWindow(0x280938,NEAREST)=10001
+[16:52:20.111] [WS] layout(startup) basis=rcWork target=(0,0,1920,1008) actual=(0,0,1920,1008) parent=0x1000C parentOffsetCorrection=(0,0) lastErr=0
+[16:52:20.111] [RECT] host screen=(0,0,1920,1008)
+[16:52:20.111] [RECT] island screen=(0,0,1920,1008) root=0x280938
+[16:52:20.113] [WS] enum monitors ok=True count=1 SM_CMONITORS=1 MonitorFromWindow(0x280938,NEAREST)=10001
+[16:52:20.114] [WS] monitor[1/1] hm=10001 device=\\.\DISPLAY1 primary=True dpi=144x144 rcMonitor=(0,0,1920,1080)px rcWork=(0,0,1920,1008)px | dipMonitor=(0,0,1280,720) dipWork=(0,0,1280,672)
+[16:52:20.114] [WS] SPI_GETWORKAREA ok=True rect=(0,0,1920,1008)px dip=(0,0,1280,672) equalCurrentRcWork=True equalPrimaryRcWork=True
+[16:52:20.116] [WS] taskbar ABM_GETTASKBARPOS ok=True edge=下(3) rect=(0,1008,1920,1080)px
+[16:52:20.117] [WS] insets(work vs monitor) px: left=0 top=0 right=0 bottom=72 dipBottom=48
+[16:52:20.117] [WS] verdict(startup) host=(0,0,1920,1008)px layout=铺满工作区(rcWork) bottomOverWork=0px(0dip) desktopMode=False
+[16:52:20.118] [WS] hit(workBottom-10) (960,998) => WinUI2DemoHost.92031148caf447388be0755a9416380a 0x280938 ours=True root=0x280938
+[16:52:20.118] [WS] hit(workBottom+10) (960,1018) => Shell_TrayWnd 0x1013A ours=False root=0x1013A
+[16:52:20.120] [WS] text => 显示器: \\.\DISPLAY1（主屏）1920x1080px @144DPI → 1280x720DIP | rcMonitor=(0,0,1920,1080)px / 0,0,1280,720DIP rcWork=(0,0,1920,1008)px / 0,0,1280,672DIP | SPI_GETWORKAREA=(0,0,1920,1008)px ok=True 与当前屏rcWork一致=True 任务栏边=下 rect=(0,1008,1920,1080)px | 本次布局: 铺满工作区（host=(0,0,1920,1008)px）；置顶态：宿主为 topmost，盖在任务栏之上 → 可见范围=宿主矩形

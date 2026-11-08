@@ -19,6 +19,8 @@
                               Foreground="White" Toggled="Transparency_Toggled" />
                 <ToggleSwitch x:Name="DesktopSwitch" Header="嵌入桌面" IsOn="False"
                               Foreground="White" Toggled="Desktop_Toggled" />
+                <ToggleSwitch x:Name="FillSwitch" Header="铺满桌面" IsOn="False"
+                              Foreground="White" Toggled="Fill_Toggled" />
                 <Button Content="退出" Click="Quit_Click" VerticalAlignment="Center" />
             </StackPanel>
         </Border>
@@ -32,6 +34,8 @@
                                Severity="Success" IsOpen="True" IsClosable="False" />
                 <TextBlock x:Name="StatusText" Foreground="#F0FFFFFF" FontSize="12"
                            TextWrapping="Wrap" Text="初始化中…" />
+                <TextBlock x:Name="WorkspaceText" Foreground="#D0E8F0FF" FontSize="11"
+                           TextWrapping="Wrap" Text="工作区: 初始化中…" />
             </StackPanel>
         </Border>
     </Grid>

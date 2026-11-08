@@ -1,0 +1,11 @@
+mode=desktoppane log=C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\artifacts\WinUI2Demo-desktoppane-uia-20261108-171744.log
+pid=24660 aumid=WinUI2Demo_p06pf12qzbwg4!App
+hostHwnd=0x440084
+uia scope: name='WinUI2DemoHost' class='WinUI2DemoHost.e520ba7a0c344278b8ade719b6f078ad'
+foreground: host=1015C expected=440084 ok=False
+found: goB=True transparency=True fill=True quit=True
+FAIL nav: 未收到 Navigated to PageB
+FAIL transparency: 未收到 toggled 日志
+FAIL fill: 未收到 fill toggled 日志
+FAIL quit: 未收到 close requested
+RESULT mode=desktoppane failures=4

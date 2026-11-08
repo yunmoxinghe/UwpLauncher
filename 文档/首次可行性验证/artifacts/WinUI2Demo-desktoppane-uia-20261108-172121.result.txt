@@ -1,0 +1,12 @@
+mode=desktoppane log=C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\artifacts\WinUI2Demo-desktoppane-uia-20261108-172121.log
+pid=21088 aumid=WinUI2Demo_p06pf12qzbwg4!App
+hostHwnd=0x1890DCE
+uia scope: name='WinUI2DemoHost' class='WinUI2DemoHost.f8db25afc9ef4020a6f81c5616af95d4'
+foreground: host=1015C expected=1890DCE ok=False
+found: goB=True transparency=True fill=True quit=True
+PASS nav: 嵌入后点击按钮导航成功
+PASS transparency: 点击开关切换透明成功
+PASS fill: 点击
+PASS quit: 点击退出成功
+process exited=True
+RESULT mode=desktoppane failures=0

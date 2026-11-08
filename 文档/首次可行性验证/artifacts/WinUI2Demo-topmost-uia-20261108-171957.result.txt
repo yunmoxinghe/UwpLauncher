@@ -1,0 +1,12 @@
+mode=topmost log=C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\artifacts\WinUI2Demo-topmost-uia-20261108-171957.log
+pid=15672 aumid=WinUI2Demo_p06pf12qzbwg4!App
+hostHwnd=0x3C093A
+uia scope: name='WinUI2DemoHost' class='WinUI2DemoHost.ce969b2811e74c238f92c379620c4276'
+foreground: host=3C093A expected=3C093A ok=True
+found: goB=True transparency=True fill=True quit=True
+PASS nav: 嵌入后点击按钮导航成功
+PASS transparency: 点击开关切换透明成功
+PASS fill: 点击
+PASS quit: 点击退出成功
+process exited=True
+RESULT mode=topmost failures=0

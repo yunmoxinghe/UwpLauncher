@@ -1,0 +1,10 @@
+﻿mode=desktoppane log=C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\artifacts\WinUI2Demo-desktoppane-uia-20261108-161326.log
+pid=20684 aumid=WinUI2Demo_p06pf12qzbwg4!App
+hostHwnd=0x380B7E
+uia scope: name='WinUI2DemoHost' class='WinUI2DemoHost.e47c8bbccbf34a50b58613705f95cd58'
+found: goB=True transparency=True quit=True
+FAIL nav: 未收到 Navigated to PageB
+PASS transparency: 点击开关切换透明成功
+PASS quit: 点击退出成功
+process exited=True
+RESULT mode=desktoppane failures=1

@@ -10,10 +10,12 @@ namespace WinUI2Demo
     {
         internal static bool PendingTransparencyToggle;
         internal static bool PendingModeToggle;
+        internal static bool PendingFillToggle;
         internal static bool PendingClose;
 
         internal static void ToggleTransparency() => PendingTransparencyToggle = true;
         internal static void ToggleMode() => PendingModeToggle = true;
+        internal static void ToggleFill() => PendingFillToggle = true;
         internal static void Close() => PendingClose = true;
     }
 
@@ -36,15 +38,24 @@ namespace WinUI2Demo
 
         internal Frame ContentFrame => MainFrame;
 
-        internal void UpdateStatus(string text, bool transparent, bool desktopMode)
+        internal void UpdateStatus(string text, bool transparent, bool desktopMode, bool fillDesktop, string workspace)
         {
             StatusText.Text = text;
+            WorkspaceText.Text = workspace;
             _syncing = true;
             if (TransparencySwitch.IsOn != transparent)
                 TransparencySwitch.IsOn = transparent;
             if (DesktopSwitch.IsOn != desktopMode)
                 DesktopSwitch.IsOn = desktopMode;
+            if (FillSwitch.IsOn != fillDesktop)
+                FillSwitch.IsOn = fillDesktop;
             _syncing = false;
+        }
+
+        private void Fill_Toggled(object sender, RoutedEventArgs e)
+        {
+            if (!_syncing)
+                DemoBridge.ToggleFill();
         }
 
         private void Transparency_Toggled(object sender, RoutedEventArgs e)

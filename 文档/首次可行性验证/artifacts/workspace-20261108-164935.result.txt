@@ -1,0 +1,18 @@
+﻿stamp=20261108-164935
+[topmost/fill=work] dpiScale=0.667 host=(80,60,1200,700)px rcMonitor=(0,0,1920,1080)px rcWork=(0,0,1920,1008)px taskbar=(x0..1920,y1008..1080)px layout=铺满工作区(rcWork)
+[topmost/fill=work] band@(733,53)=RGB(25,25,25) expect=DodgerBlue ok=False
+[topmost/fill=work] aboveTaskbar@(427,668) demo=RGB(0,0,0) baseline=RGB(40,115,254) diff=254 ok=True
+[topmost/fill=work] taskbarStrip@(427,696) demo=RGB(0,0,0) baseline=RGB(28,134,254) diff=254 expectCovered=False ok=False
+[topmost/fill=desktop] dpiScale=0.667 host=(80,60,1200,700)px rcMonitor=(0,0,1920,1080)px rcWork=(0,0,1920,1008)px taskbar=(x0..1920,y1008..1080)px layout=铺满整个桌面(rcMonitor)
+[topmost/fill=desktop] band@(733,53)=RGB(25,25,25) expect=DodgerBlue ok=False
+[topmost/fill=desktop] aboveTaskbar@(427,668) demo=RGB(0,0,0) baseline=RGB(40,115,254) diff=254 ok=True
+[topmost/fill=desktop] taskbarStrip@(427,696) demo=RGB(0,0,0) baseline=RGB(28,134,254) diff=254 expectCovered=True ok=True
+[desktoppane/fill=work] dpiScale=0.667 host=(80,60,1200,700)px rcMonitor=(0,0,1920,1080)px rcWork=(0,0,1920,1008)px taskbar=(x0..1920,y1008..1080)px layout=铺满工作区(rcWork)
+[desktoppane/fill=work] band@(733,53)=RGB(25,25,25) expect=DodgerBlue ok=False
+[desktoppane/fill=work] aboveTaskbar@(427,668) demo=RGB(0,0,0) baseline=RGB(40,115,254) diff=254 ok=True
+[desktoppane/fill=work] taskbarStrip@(427,696) demo=RGB(0,0,0) baseline=RGB(28,134,254) diff=254 expectCovered=False ok=False
+[desktoppane/fill=desktop] dpiScale=0.667 host=(80,60,1200,700)px rcMonitor=(0,0,1920,1080)px rcWork=(0,0,1920,1008)px taskbar=(x0..1920,y1008..1080)px layout=铺满整个桌面(rcMonitor)
+[desktoppane/fill=desktop] band@(733,53)=RGB(25,25,25) expect=DodgerBlue ok=False
+[desktoppane/fill=desktop] aboveTaskbar@(427,668) demo=RGB(0,0,0) baseline=RGB(40,115,254) diff=254 ok=True
+[desktoppane/fill=desktop] taskbarStrip@(427,696) demo=RGB(0,0,0) baseline=RGB(28,134,254) diff=254 expectCovered=False ok=False
+RESULT failures=4

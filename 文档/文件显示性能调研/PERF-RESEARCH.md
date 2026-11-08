@@ -2,7 +2,7 @@
 
 > 范围：在 Windows 上把一个文件夹的内容（名称、图标/缩略图、大小、时间等）快速显示到 UWP / XAML Island 界面。
 > 本机实测时间：2026-11-08，Windows 11 build 26300（Insider），i7-8550U / 8 GB / SATA SSD（NTFS）。
-> 配套文档：[Files 上游文件视图方案分析](./FILES-SOLUTION-REFERENCE.md)（本项目主解决方案参考）。
+> 配套文档：[Files 上游文件视图方案分析](./FILES-SOLUTION-REFERENCE.md)（本项目主解决方案参考）、[内存调研与「要不要改用 C++」](./MEMORY-RESEARCH.md)。
 > 临时工程位于 `C:\Users\gold\perf-research\`（仓库外，未提交）。
 
 ---

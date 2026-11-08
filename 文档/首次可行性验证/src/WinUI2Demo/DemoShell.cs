@@ -15,33 +15,26 @@ namespace WinUI2Demo
     internal static class DemoBridge
     {
         internal static bool PendingTransparencyToggle;
-        internal static bool PendingModeToggle;
-        internal static bool PendingFillToggle;
         internal static bool PendingClose;
 
         internal static void ToggleTransparency() => PendingTransparencyToggle = true;
-        internal static void ToggleMode() => PendingModeToggle = true;
-        internal static void ToggleFill() => PendingFillToggle = true;
         internal static void Close() => PendingClose = true;
     }
 
     /// <summary>
-    /// 正式版外壳：顶部控制条（透明/退出） + 中间 Frame（默认文件视图） + 底部状态栏。
+    /// 正式版外壳：内容 Frame 直接铺满宿主，文件网格是唯一界面。
     /// 保持已验证的岛机制：DesktopWindowXamlSource + IXamlSourceTransparency；这里只是内容层。
     /// 入场动画由 Program 在“首帧已提交”后触发（PrepareEntrance → PlayEntrance）。
+    /// 正式版不显示任何控制条/状态栏/日志面板，诊断信息只写日志文件。
     /// </summary>
     public sealed partial class DemoShell : UserControl
     {
-        private bool _syncing;
         private bool _entrancePlayed;
         private System.Threading.Timer? _animTimer;
 
         public DemoShell()
         {
-            // XAML 里的 IsOn 初值也会触发 Toggled；初始化期间屏蔽，避免误发切换请求
-            _syncing = true;
             InitializeComponent();
-            _syncing = false;
             Loaded += (_, __) =>
             {
                 Program.ShellLoaded = true;
@@ -132,23 +125,5 @@ namespace WinUI2Demo
             RootGrid.Background = new SolidColorBrush(Color.FromArgb(0xFF, 0x11, 0x14, 0x1A));
             Program.Log("[FALLBACK] shell opaque background applied");
         }
-
-        internal void UpdateStatus(string text, bool transparent, string workspace)
-        {
-            StatusText.Text = text;
-            WorkspaceText.Text = workspace;
-            _syncing = true;
-            if (TransparencySwitch.IsOn != transparent)
-                TransparencySwitch.IsOn = transparent;
-            _syncing = false;
-        }
-
-        private void Transparency_Toggled(object sender, RoutedEventArgs e)
-        {
-            if (!_syncing)
-                DemoBridge.ToggleTransparency();
-        }
-
-        private void Quit_Click(object sender, RoutedEventArgs e) => DemoBridge.Close();
     }
 }

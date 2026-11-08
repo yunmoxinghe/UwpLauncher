@@ -6,12 +6,14 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Windows.Foundation;
 using Windows.System;
 using Windows.Storage;
 using Windows.Storage.FileProperties;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Media.Imaging;
 using Windows.UI.Xaml.Navigation;
@@ -36,6 +38,15 @@ namespace WinUI2Demo
             Items.Clear();
         }
 
+        /// <summary>用源列表的一段重建当前可见页（一次 Reset，不逐项通知）。</summary>
+        internal void SetPage(IList<T> source, int start, int count)
+        {
+            Items.Clear();
+            var end = Math.Min(source.Count, start + count);
+            for (var i = start; i < end; i++)
+                Items.Add(source[i]);
+        }
+
         internal void RaiseReset()
         {
             OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
@@ -53,11 +64,18 @@ namespace WinUI2Demo
         /// <summary>图标缓存上限：只保留最近使用且靠近视口的图标，超出后淘汰离屏项（回落为类型字形）。</summary>
         private const int MaxCachedIcons = 160;
 
+        /// <summary>完整枚举结果（分页的数据源）。</summary>
         public BulkObservableCollection<FileEntry> Items { get; } = new();
+        /// <summary>当前页绑定到 GridView 的可见子集；滚动已禁用，只显示一屏。</summary>
+        public BulkObservableCollection<FileEntry> VisibleItems { get; } = new();
+
+        private double _itemSlotWidth = 180;
+        private double _itemSlotHeight = 104;
+        private int _pageSize = 12;
+        private int _pageIndex;
 
         private CoreDispatcher? _dispatcher;
         private CancellationTokenSource? _cts;
-        private DispatcherTimer? _progressTimer;
         private DispatcherTimer? _heartbeatTimer;
         private DispatcherTimer? _scrollSummaryTimer;
         private DispatcherTimer? _iconSettleTimer;
@@ -67,7 +85,17 @@ namespace WinUI2Demo
         private bool _active;
         private bool _feedDone;
         private bool _firstRealizedLogged;
+        private string _currentPath = "";
         private int _generation;
+
+        // 条目自绘状态：同一时刻最多一个悬停/按下项，选中项由 SelectionChanged 维护
+        private FileEntry? _hoveredEntry;
+        private FileEntry? _pressedEntry;
+        private FileEntry? _selectedEntry;
+        private Brush? _idleBrush;
+        private Brush? _hoverBrush;
+        private Brush? _pressedBrush;
+        private Brush? _selectedBrush;
         private static readonly long ViewLogIntervalTicks = 500 * Stopwatch.Frequency / 1000;
 
         private long _pageStartTicks;
@@ -109,13 +137,33 @@ namespace WinUI2Demo
         public FileViewPage()
         {
             InitializeComponent();
+            _itemSlotWidth = ResDouble("ItemSlotWidth", 180);
+            _itemSlotHeight = ResDouble("ItemSlotHeight", 104);
+            _idleBrush = ResBrush("ItemIdleBrush");
+            _hoverBrush = ResBrush("ItemHoverBrush");
+            _pressedBrush = ResBrush("ItemPressedBrush");
+            _selectedBrush = ResBrush("ItemSelectedBrush");
             FileList.Loaded += (_, __) => AttachScrollViewer();
             // NativeAOT 下实测 Loaded 不一定会触发，布局变化时也尝试挂载
             FileList.LayoutUpdated += OnListLayoutUpdated;
+            // 滚动已禁用：滚轮改为翻页（GridView 内部 ScrollViewer 可能标记 handled，这里强制接收）
+            RootGrid.AddHandler(UIElement.PointerWheelChangedEvent,
+                new PointerEventHandler(RootGrid_PointerWheelChanged), true);
+            // 右键菜单：GridViewItem 可能吃掉 RightTapped，这里在根层兜底并手动弹出
+            RootGrid.AddHandler(UIElement.RightTappedEvent,
+                new RightTappedEventHandler(RootGrid_RightTapped), true);
             // 启动时序证据：页面进入可视树并完成第一次布局的时间点
             Loaded += (_, __) => Program.Log(
                 $"[STARTUP] page Loaded name={GetType().Name} t={Program.StartupMs()}ms");
         }
+
+        private static double ResDouble(string key, double fallback)
+        {
+            var value = Application.Current.Resources[key];
+            return value is double d ? d : fallback;
+        }
+
+        private static Brush? ResBrush(string key) => Application.Current.Resources[key] as Brush;
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
         {
@@ -128,7 +176,6 @@ namespace WinUI2Demo
             if (string.IsNullOrWhiteSpace(path))
                 path = DefaultDirectory();
 
-            PathBox.Text = path;
             Program.Log($"[FV] page start path='{path}'");
             Program.OcclusionChanged += OnOcclusionFromAnyThread;
             HookMemoryManager();
@@ -155,6 +202,8 @@ namespace WinUI2Demo
             _iconLru.Clear();
             _iconLruNodes.Clear();
             _realizedEntries.Clear();
+            VisibleItems.ClearSilent();
+            VisibleItems.RaiseReset();
             FindFileEnumerator.MaxBatchItems = FindFileEnumerator.NormalBatchItems;
             StopLoad();
             base.OnNavigatedFrom(e);
@@ -169,30 +218,231 @@ namespace WinUI2Demo
             return profile;
         }
 
-        private void Back_Click(object sender, RoutedEventArgs e)
+        /// <summary>右键菜单：返回上一级（到根目录时禁用）。</summary>
+        private void Up_Click(object sender, RoutedEventArgs e)
         {
-            if (Frame?.CanGoBack == true)
+            var parent = Directory.GetParent(_currentPath);
+            if (parent is null)
+                return;
+            Program.Log($"[FV] up from '{_currentPath}' => '{parent.FullName}'");
+            StartLoad(parent.FullName);
+        }
+
+        private void Quit_Click(object sender, RoutedEventArgs e)
+        {
+            Program.Log("[FV] quit requested");
+            DemoBridge.Close();
+        }
+
+        /// <summary>单击：GridView 自身完成选中（SelectionMode=Single），这里只记录命中，便于回归核对。</summary>
+        private void FileList_ItemClick(object sender, ItemClickEventArgs e)
+        {
+            if (e.ClickedItem is FileEntry entry)
+                Program.Log($"[FV] item click name='{entry.Name}' isDir={entry.IsDirectory}");
+        }
+
+        private void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var previous = _selectedEntry;
+            _selectedEntry = FileList.SelectedItem as FileEntry;
+            UpdateEntrySurface(previous);
+            UpdateEntrySurface(_selectedEntry);
+            Program.Log($"[FV] selection changed -> '{_selectedEntry?.Name ?? "<none>"}' count={FileList.SelectedItems.Count}");
+        }
+
+        private void Item_PointerEntered(object sender, PointerRoutedEventArgs e)
+        {
+            var entry = (sender as FrameworkElement)?.DataContext as FileEntry;
+            _hoveredEntry = entry;
+            ApplySurfaceVisual(sender as Border, entry);
+            if (Program.InputLogEnabled && entry is not null)
+                Program.Log($"[FV] hover enter name='{entry.Name}'");
+        }
+
+        private void Item_PointerExited(object sender, PointerRoutedEventArgs e)
+        {
+            var entry = (sender as FrameworkElement)?.DataContext as FileEntry;
+            if (_hoveredEntry == entry)
+                _hoveredEntry = null;
+            ApplySurfaceVisual(sender as Border, entry);
+        }
+
+        private void Item_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            var entry = (sender as FrameworkElement)?.DataContext as FileEntry;
+            _pressedEntry = entry;
+            ApplySurfaceVisual(sender as Border, entry);
+        }
+
+        private void Item_PointerReleased(object sender, PointerRoutedEventArgs e)
+        {
+            var entry = (sender as FrameworkElement)?.DataContext as FileEntry;
+            if (_pressedEntry == entry)
+                _pressedEntry = null;
+            ApplySurfaceVisual(sender as Border, entry);
+        }
+
+        private void ApplySurfaceVisual(Border? surface, FileEntry? entry)
+        {
+            if (surface is null)
+                return;
+            surface.Background = entry == _selectedEntry ? _selectedBrush
+                : entry == _pressedEntry ? _pressedBrush
+                : entry == _hoveredEntry ? _hoverBrush
+                : _idleBrush;
+        }
+
+        private void UpdateEntrySurface(FileEntry? entry)
+        {
+            if (entry is null)
+                return;
+            if (FileList.ContainerFromItem(entry) is GridViewItem container)
+                ApplySurfaceVisual(FindItemSurface(container), entry);
+        }
+
+        private static Border? FindItemSurface(DependencyObject? root)
+        {
+            if (root is null)
+                return null;
+            var count = VisualTreeHelper.GetChildrenCount(root);
+            for (var i = 0; i < count; i++)
             {
-                Program.Log("[FV] back => GoBack()");
-                Frame.GoBack();
+                var child = VisualTreeHelper.GetChild(root, i);
+                if (child is Border border)
+                    return border;
+                var found = FindItemSurface(child);
+                if (found is not null)
+                    return found;
             }
+            return null;
+        }
+
+        // ---------------- 分页：可用区域定列数/行数，滚动禁用 ----------------
+
+        private int PageCount => Math.Max(1, (Items.Count + _pageSize - 1) / _pageSize);
+
+        private void FileList_SizeChanged(object sender, SizeChangedEventArgs e) => UpdatePageMetrics();
+
+        /// <summary>列数 = floor(可用宽度 / 槽宽)，行数 = floor(可用高度 / 槽高)，一页即一屏。</summary>
+        private void UpdatePageMetrics()
+        {
+            var width = FileList.ActualWidth;
+            var height = FileList.ActualHeight;
+            if (width <= 0 || height <= 0)
+                return;
+
+            var columns = Math.Max(1, (int)Math.Floor(width / _itemSlotWidth));
+            var rows = Math.Max(1, (int)Math.Floor(height / _itemSlotHeight));
+            var size = columns * rows;
+            if (size == _pageSize)
+                return;
+
+            _pageSize = size;
+            _pageIndex = 0;
+            Program.Log($"[FV] page metrics w={width:F0} h={height:F0} " +
+                $"cols={columns} rows={rows} pageSize={size}");
+            RefreshVisiblePage();
+        }
+
+        private void RefreshVisiblePage()
+        {
+            var pages = PageCount;
+            if (_pageIndex >= pages)
+                _pageIndex = pages - 1;
+            if (_pageIndex < 0)
+                _pageIndex = 0;
+
+            var start = _pageIndex * _pageSize;
+            var count = Math.Min(_pageSize, Math.Max(0, Items.Count - start));
+            VisibleItems.SetPage(Items, start, count);
+            VisibleItems.RaiseReset();
+            UpdateMenuState();
+        }
+
+        private void UpdateMenuState()
+        {
+            try { UpMenuItem.IsEnabled = Directory.GetParent(_currentPath) is not null; }
+            catch { UpMenuItem.IsEnabled = false; }
+            PrevPageMenuItem.IsEnabled = _pageIndex > 0;
+            NextPageMenuItem.IsEnabled = _pageIndex < PageCount - 1;
+        }
+
+        private void GoToPage(int delta)
+        {
+            var next = _pageIndex + delta;
+            var pages = PageCount;
+            if (next < 0 || next >= pages)
+                return;
+
+            _pageIndex = next;
+            Program.Log($"[FV] page {_pageIndex + 1}/{pages} size={_pageSize} start={_pageIndex * _pageSize}");
+            _hoveredEntry = null;
+            _pressedEntry = null;
+            FileList.SelectedItem = null;
+            RefreshVisiblePage();
+            ScheduleVisibleIconQueue();
+        }
+
+        private void PrevPage_Click(object sender, RoutedEventArgs e) => GoToPage(-1);
+
+        private void NextPage_Click(object sender, RoutedEventArgs e) => GoToPage(1);
+
+        /// <summary>滚轮翻页：桌面形态下不滚动长列表，一格滚轮切换一屏。</summary>
+        private void RootGrid_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
+        {
+            var delta = e.GetCurrentPoint(RootGrid).Properties.MouseWheelDelta;
+            if (delta == 0)
+                return;
+            GoToPage(delta > 0 ? -1 : 1);
+            e.Handled = true;
+        }
+
+        private void RootGrid_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            if (RootGrid.Resources["DesktopMenu"] is not MenuFlyout menu)
+                return;
+            var point = e.GetPosition(RootGrid);
+            menu.ShowAt(RootGrid, new Point(point.X, point.Y));
+            e.Handled = true;
+        }
+
+        /// <summary>双击目录进入；文件双击不启动外部程序（避免桌面层误触发）。</summary>
+        private void FileList_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+        {
+            var entry = (e.OriginalSource as FrameworkElement)?.DataContext as FileEntry;
+            Program.Log($"[FV] double tapped src={e.OriginalSource?.GetType().Name} " +
+                $"entry='{entry?.Name ?? "<none>"}'");
+            if (entry?.IsDirectory != true)
+                return;
+
+            Program.Log($"[FV] double click enter dir='{entry.FullPath}'");
+            StartLoad(entry.FullPath);
+            e.Handled = true;
         }
 
         private void Reload_Click(object sender, RoutedEventArgs e)
         {
-            var dir = PathBox.Text.Trim();
-            if (string.IsNullOrEmpty(dir))
+            if (string.IsNullOrEmpty(_currentPath))
                 return;
-            Program.Log($"[FV] reload path='{dir}'");
-            StartLoad(dir);
+            Program.Log($"[FV] reload path='{_currentPath}'");
+            StartLoad(_currentPath);
         }
 
         private void StartLoad(string path)
         {
             StopLoad();
 
+            _currentPath = path;
+            _pageIndex = 0;
+            _hoveredEntry = null;
+            _pressedEntry = null;
+            _selectedEntry = null;
+
             Items.ClearSilent();
             Items.RaiseReset();
+            VisibleItems.ClearSilent();
+            VisibleItems.RaiseReset();
+            UpdateMenuState();
 
             _active = true;
             _feedDone = false;
@@ -222,9 +472,6 @@ namespace WinUI2Demo
             _hbSamples = 0;
             _hbLastTicks = Stopwatch.GetTimestamp();
 
-            MetricsText.Text = $"路径: {path} | 枚举中…";
-            StatusText.Text = "枚举中… 后台线程 FindFirstFileExW（FindExInfoBasic + LARGE_FETCH）";
-
             MemProbe.ResetBaseline();
             StartTimers();
 
@@ -232,9 +479,6 @@ namespace WinUI2Demo
             {
                 Program.Log($"[FV] path missing '{path}'");
                 _feedDone = true;
-                StatusText.Text = $"目录不存在: {path}";
-                MetricsText.Text = $"路径: {path} | 错误: 目录不存在";
-                _progressTimer?.Stop();
                 return;
             }
 
@@ -252,8 +496,6 @@ namespace WinUI2Demo
             _cts?.Dispose();
             _cts = null;
 
-            _progressTimer?.Stop();
-            _progressTimer = null;
             _heartbeatTimer?.Stop();
             _heartbeatTimer = null;
             _scrollSummaryTimer?.Stop();
@@ -268,10 +510,6 @@ namespace WinUI2Demo
 
         private void StartTimers()
         {
-            _progressTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
-            _progressTimer.Tick += (_, __) => UpdateProgressText();
-            _progressTimer.Start();
-
             _heartbeatTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
             _heartbeatTimer.Tick += (_, __) => OnHeartbeat();
             _heartbeatTimer.Start();
@@ -340,6 +578,7 @@ namespace WinUI2Demo
 
             Items.AddRangeSilent(batch.Items);
             Items.RaiseReset();
+            RefreshVisiblePage();
             _layoutPending = true;
             _layoutPendingTicks = Stopwatch.GetTimestamp();
             _layoutPendingBatch = batch.BatchIndex;
@@ -363,8 +602,6 @@ namespace WinUI2Demo
 
             Program.Log($"[FV] batch n={batch.BatchIndex} count={batch.Items.Count} shown={Items.Count} " +
                 $"scanned={batch.TotalSoFar} enumMs={batch.EnumElapsedMs} uiDelayMs={uiDelayMs} applyMs={applyMs}");
-
-            UpdateProgressText();
         }
 
         private void OnDoneFromBackground(int total, long enumMs, string? error, int generation)
@@ -397,7 +634,6 @@ namespace WinUI2Demo
             MemProbe.Log("feedDone", Items.Count, EstimateModelBytes(),
                 _iconLru.Count, _maxBatchItems);
 
-            _progressTimer?.Stop();
             ResetHeartbeatWindow();
 
             // 图标管线是异步的，枚举完成后再等 2 秒记录一次最终计数（失败回退也要可见）
@@ -417,26 +653,9 @@ namespace WinUI2Demo
 
             var iconOk = Volatile.Read(ref _iconLoaded);
             var iconFail = Volatile.Read(ref _iconFailed);
-            var summary = $"完成: {Items.Count} 项 · 枚举 {enumMs} ms · 首批到列表 {_firstPaintMs} ms · " +
-                $"全部入列表 {_feedDoneMs} ms · 批次 {_batchCount} · " +
-                $"图标 {iconOk}/{_iconRequested} 成功({iconFail} 失败)" +
-                (error is null ? "" : $" · 错误: {error}");
-            StatusText.Text = summary;
-            MetricsText.Text = $"路径: {PathBox.Text} | UI 最大停顿 {_hbMaxGapMs} ms/{_hbSamples} 次 · " +
-                $"UI 应用单批最大 {_uiApplyMaxMs} ms";
-
-            UpdateProgressText();
-        }
-
-        private void UpdateProgressText()
-        {
-            if (_feedDone)
-                return;
-
-            var scanned = Volatile.Read(ref _enumScanned);
-            StatusText.Text = $"枚举中… 后台已扫描 {scanned} 项 / 已显示 {Items.Count} 项 · " +
-                $"批次 {_batchCount} · 首批 {(_firstPaintMs > 0 ? _firstPaintMs + " ms" : "未上屏")}";
-            MetricsText.Text = $"路径: {PathBox.Text} | UI 最大停顿 {_hbMaxGapMs} ms/{_hbSamples} 次";
+            Program.Log($"[FV] done items={Items.Count} enumMs={enumMs} firstBatchMs={_firstPaintMs} " +
+                $"feedDoneMs={_feedDoneMs} batches={_batchCount} icons={iconOk}/{_iconRequested} fail={iconFail}" +
+                (error is null ? "" : $" error={error}"));
         }
 
         /// <summary>
@@ -581,6 +800,8 @@ namespace WinUI2Demo
                     var name = args.Item is FileEntry firstEntry ? firstEntry.Name : "?";
                     Program.Log($"[FV] firstRealized name='{name}' atMs={PageElapsedMs()}");
                 }
+                // 容器复用后旧项的背景可能残留；相位 1 时模板已展开，按当前状态重置
+                args.RegisterUpdateCallback(OnItemContentPhase1);
             }
 
             if (args.Item is FileEntry entry)
@@ -590,6 +811,13 @@ namespace WinUI2Demo
                 if (!IconQueuePending)
                     QueueIconIfNearViewport(entry, args.ItemIndex);
             }
+        }
+
+        private void OnItemContentPhase1(ListViewBase sender, ContainerContentChangingEventArgs args)
+        {
+            if (args.InRecycleQueue)
+                return;
+            ApplySurfaceVisual(FindItemSurface(args.ItemContainer), args.Item as FileEntry);
         }
 
         /// <summary>只为可视区（±2 项）请求图标；二维缓存区离屏项不解码，滚入时由 ViewChanged 补。</summary>
@@ -617,7 +845,7 @@ namespace WinUI2Demo
         private void QueueVisibleIcons()
         {
             var panel = FileList.ItemsPanelRoot as ItemsWrapGrid;
-            if (panel is null || Items.Count == 0)
+            if (panel is null || VisibleItems.Count == 0)
                 return;
 
             var first = panel.FirstVisibleIndex;
@@ -626,9 +854,9 @@ namespace WinUI2Demo
                 return;
 
             var start = Math.Max(0, first - 2);
-            var end = Math.Min(Items.Count - 1, last + 2);
+            var end = Math.Min(VisibleItems.Count - 1, last + 2);
             for (var i = start; i <= end; i++)
-                QueueIcon(Items[i]);
+                QueueIcon(VisibleItems[i]);
         }
 
         private void QueueIcon(FileEntry entry)
@@ -1018,7 +1246,8 @@ namespace WinUI2Demo
             }
 
             Program.Log($"[FV] view({reason}) first={first} last={last} realized={_realized} " +
-                $"shown={Items.Count} icons requested={_iconRequested} " +
+                $"total={Items.Count} visible={VisibleItems.Count} page={_pageIndex + 1}/{PageCount} " +
+                $"icons requested={_iconRequested} " +
                 $"loaded={Volatile.Read(ref _iconLoaded)} failed={Volatile.Read(ref _iconFailed)} " +
                 $"evicted={_iconEvicted} cache={_iconLru.Count} visibleMissing={missing}");
         }

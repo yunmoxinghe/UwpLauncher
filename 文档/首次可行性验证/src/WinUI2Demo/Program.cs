@@ -36,14 +36,12 @@ namespace WinUI2Demo
         // 物理像素；按 1280x720/144DPI 的屏幕留出边距，约合 747x427 DIP
         private const int HostX = 80, HostY = 60, HostW = 1120, HostH = 640;
 
-        // 全局热键：嵌入 WorkerW 后窗口没有焦点，按钮点不到，必须靠热键切回/退出
+        // 全局热键：嵌入桌面层后窗口没有焦点，按钮点不到，必须靠热键切透明/退出
         private const int HotkeyTransparency = 1;
-        private const int HotkeyMode = 2;
         private const int HotkeyClose = 3;
         private const uint ModControl = 0x0002;
         private const uint ModNoRepeat = 0x4000;
         private const uint VkF2 = 0x71;
-        private const uint VkF3 = 0x72;
         private const uint VkF4 = 0x73;
 
         private const uint WS_POPUP = 0x80000000u;
@@ -81,9 +79,12 @@ namespace WinUI2Demo
         private const uint WM_NCHITTEST = 0x0084u;
         private const uint WM_LBUTTONDOWN = 0x0201u;
         private const uint WM_LBUTTONUP = 0x0202u;
+        private const uint WM_MOUSEMOVE = 0x0200u;
         private const uint WM_POINTERDOWN = 0x0246u;
         private const uint WM_POINTERUP = 0x0247u;
         private const int MA_ACTIVATE = 1;
+        // 点击时不激活窗口：前台窗口保持用户原来的应用
+        private const int MA_NOACTIVATE = 3;
 
         private static readonly Guid IID_IDesktopWindowXamlSourceNative2 = new("E3DCD8C7-3057-4692-99C3-7B7720AFDA31");
         private static readonly Guid IID_ICoreWindowInterop = new("45D64A29-A63E-4CB6-B498-5781D298CB4F");
@@ -189,6 +190,9 @@ namespace WinUI2Demo
         private static extern nint WindowFromPoint(POINT32 point);
 
         [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(nint hwnd, out uint pid);
+
+        [DllImport("user32.dll")]
         private static extern nint MonitorFromWindow(nint hwnd, uint flags);
 
         // 项目关闭了运行时封送（DisableRuntimeMarshalling）：全部用 nint 传结构指针
@@ -226,10 +230,18 @@ namespace WinUI2Demo
         internal static bool OcclusionEnabled = true;
         /// <summary>诊断开关（--icons 0）：跳过 Shell 缩略图，用于把“网格布局代价”和“图标解码代价”拆开测。</summary>
         internal static bool IconsEnabled = true;
+        /// <summary>诊断开关（--inputlog 1）：记录限流的 WM_MOUSEMOVE，用于悬停/命中回归。默认为关。</summary>
+        internal static bool InputLogEnabled = false;
+        private static long s_lastMoveLogTicks;
 
         private static System.Threading.Timer? s_occTimer;
         private static int s_occBusy;
         private static bool? s_occState;
+
+        // 前台窗口读回：启动/点击前后都靠 API 记录，不靠目视
+        private static System.Threading.Timer? s_fgTimer;
+        private static int s_fgBusy;
+        private static nint s_lastFg;
 
         [DllImport("user32.dll")]
         private static extern nint GetAncestor(nint hwnd, uint flags);
@@ -298,6 +310,8 @@ namespace WinUI2Demo
             var hr = PInvoke.RoInitialize(RO_INIT_TYPE.RO_INIT_SINGLETHREADED);
             Log($"RoInitialize(STA) => hr=0x{hr.Value:X8}");
             LogPackageIdentity();
+            // 启动前的前台窗口基线（API 读回，不靠目视）
+            LogForeground("startup-before");
 
             // 与 DesktopFlyouts 样例一致：在 Application 构造期间完成 XAML 初始化与消息循环
             _ = new App();
@@ -342,6 +356,8 @@ namespace WinUI2Demo
             OcclusionEnabled = GetArgValue(args, "--occ") != "0";
             // --icons 0：只做诊断，跳过 Shell 缩略图解码
             IconsEnabled = GetArgValue(args, "--icons") != "0";
+            // --inputlog 1：记录限流 WM_MOUSEMOVE（悬停/命中排查），默认关
+            InputLogEnabled = GetArgValue(args, "--inputlog") == "1";
         }
 
         private static string? GetArgValue(string[] args, string name)
@@ -497,7 +513,8 @@ namespace WinUI2Demo
             var atom = PInvoke.RegisterClass(&wc);
             Log($"[RegisterClass] host atom={atom} lastErr={Marshal.GetLastWin32Error()}");
 
-            var exStyle = WS_EX_NOREDIRECTIONBITMAP | WS_EX_TOOLWINDOW;
+            // WS_EX_NOACTIVATE：窗口永不成为前台，点击也不会把用户的应用踢到后面
+            var exStyle = WS_EX_NOREDIRECTIONBITMAP | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
             if (_mode == "topmost")
                 exStyle |= WS_EX_TOPMOST;
 
@@ -509,6 +526,22 @@ namespace WinUI2Demo
                 HostX, HostY, HostW, HostH,
                 HWND.Null, HMENU.Null, hInstance, null);
             Log($"[CreateWindow] host hwnd=0x{Hx(_host)} exStyle=0x{exStyle:X} lastErr={Marshal.GetLastWin32Error()}");
+            ApplyNoActivate(_host, "host");
+        }
+
+        /// <summary>给窗口追加 WS_EX_NOACTIVATE 并读回确认（命中可能落在岛窗口上，必须两个都设）。</summary>
+        private static void ApplyNoActivate(HWND hwnd, string tag)
+        {
+            if (hwnd.IsNull)
+                return;
+
+            var before = (long)PInvoke.GetWindowLongPtr(hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
+            var after = before | (long)WS_EX_NOACTIVATE;
+            if (after != before)
+                PInvoke.SetWindowLongPtr(hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE, (nint)after);
+
+            var readback = (long)PInvoke.GetWindowLongPtr(hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
+            Log($"[NOACTIVATE] {tag} hwnd=0x{Hx(hwnd)} ex=0x{before:X} => 0x{readback:X} ok={(readback & (long)WS_EX_NOACTIVATE) != 0}");
         }
 
         private static void InitializeXamlIsland()
@@ -529,6 +562,10 @@ namespace WinUI2Demo
 
             _native2.get_WindowHandle((HWND*)Unsafe.AsPointer(ref _xamlHwnd));
             Log($"[DWS] island hwnd=0x{Hx(_xamlHwnd)}");
+
+            // 命中测试落在 XamlExplorerHostIslandWindow 上，只给宿主加还不够：
+            // 岛窗口自身也要 NOACTIVATE，否则点击仍会激活它并抢占前台
+            ApplyNoActivate(_xamlHwnd, "island");
 
             var content = BuildContent();
             if (content is null)
@@ -632,7 +669,6 @@ namespace WinUI2Demo
         private static void RunInteractiveLoop()
         {
             var sw = Stopwatch.StartNew();
-            long lastStatus = -1;
             long lastZOrder = 0;
             while (!_exitRequested)
             {
@@ -640,11 +676,6 @@ namespace WinUI2Demo
                 HandleDemoRequests();
 
                 var elapsed = sw.ElapsedMilliseconds;
-                if (elapsed - lastStatus >= 300)
-                {
-                    lastStatus = elapsed;
-                    UpdateDemoStatus();
-                }
 
                 // explorer 偶尔会重排桌面子窗，定期把宿主重新顶到 DefView 之上
                 if (elapsed - lastZOrder >= 1000)
@@ -674,22 +705,6 @@ namespace WinUI2Demo
                 Log($"[DEMO] transparency toggled => {_transparent}");
             }
 
-            if (DemoBridge.PendingModeToggle)
-            {
-                DemoBridge.PendingModeToggle = false;
-                ToggleDesktopMode();
-            }
-
-            if (DemoBridge.PendingFillToggle)
-            {
-                DemoBridge.PendingFillToggle = false;
-                _fillDesktop = !_fillDesktop;
-                _layoutFixed = false;
-                Log($"[DEMO] fill toggled => {(_fillDesktop ? "desktop" : "work")}");
-                ApplyLayout("fill-toggle");
-                UpdateWorkspace("fill-toggle");
-            }
-
             if (DemoBridge.PendingClose)
             {
                 DemoBridge.PendingClose = false;
@@ -698,78 +713,11 @@ namespace WinUI2Demo
             }
         }
 
-        private static void UpdateDemoStatus()
-        {
-            var frame = _frame;
-            var page = frame?.Content?.GetType().Name ?? "-";
-            var stack = frame?.BackStackDepth ?? -1;
-            var canBack = frame?.CanGoBack == true;
-            string package;
-            try
-            {
-                package = Windows.ApplicationModel.Package.Current.Id.FullName;
-            }
-            catch
-            {
-                package = "无包标识（直接 exe 启动，WinUI 2 资源不可用）";
-            }
-
-            var modeText = _desktoppane ? "嵌入桌面 (DefView 之上)" : _desktopMode ? "嵌入桌面 (WorkerW 壁纸层)" : "置顶浮层";
-            var text =
-                $"模式: {modeText}    透明: {(_transparent ? "开" : "关")}    IsBackgroundTransparent={_transparentReadback}\n" +
-                $"页面: {page}    返回栈: {stack}    可返回: {(canBack ? "是" : "否")}    " +
-                $"布局: {(_layoutFixed ? "固定窗口" : _fillDesktop ? "铺满桌面" : "铺满工作区")}\n" +
-                $"包: {package}\n" +
-                $"启动时序: window={StartupMs()}ms shellLoaded={ShellLoaded} frameTicks={_frameTicks}\n" +
-                "快捷键: Ctrl+F2 透明 | Ctrl+F3 置顶/桌面 | Ctrl+F4 退出";
-            _shell?.UpdateStatus(text, _transparent, _workspaceText);
-        }
-
         private static void RegisterDemoHotkeys()
         {
-            // 全局热键：即使窗口嵌进 WorkerW、没有焦点，也能切回/退出
+            // 全局热键：即使窗口嵌进桌面层、没有焦点，也能切透明/退出
             Log($"[HOTKEY] Ctrl+F2={(bool)RegisterHotKey(_host, HotkeyTransparency, ModControl | ModNoRepeat, VkF2)} " +
-                $"Ctrl+F3={(bool)RegisterHotKey(_host, HotkeyMode, ModControl | ModNoRepeat, VkF3)} " +
                 $"Ctrl+F4={(bool)RegisterHotKey(_host, HotkeyClose, ModControl | ModNoRepeat, VkF4)}");
-        }
-
-        private static void ToggleDesktopMode()
-        {
-            if (!_desktopMode)
-            {
-                if (ReparentToDesktopPane())
-                {
-                    _desktopMode = true;
-                }
-                else
-                {
-                    FallbackToTopmost("desktop-embed-failed[toggle]");
-                }
-            }
-            else
-            {
-                long style = (long)PInvoke.GetWindowLongPtr(_host, WINDOW_LONG_PTR_INDEX.GWL_STYLE);
-                style = (style & ~(long)WS_CHILD) | WS_POPUP;
-                PInvoke.SetWindowLongPtr(_host, WINDOW_LONG_PTR_INDEX.GWL_STYLE, (nint)style);
-
-                long exStyle = (long)PInvoke.GetWindowLongPtr(_host, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
-                exStyle |= WS_EX_TOPMOST | WS_EX_TOOLWINDOW;
-                PInvoke.SetWindowLongPtr(_host, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE, (nint)exStyle);
-
-                var oldParent = PInvoke.SetParent(_host, HWND.Null);
-                PInvoke.SetWindowPos(
-                    _host, InsertAfterTop, HostX, HostY, HostW, HostH,
-                    SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE |
-                    SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW |
-                    SET_WINDOW_POS_FLAGS.SWP_FRAMECHANGED);
-                _desktopMode = false;
-                Log($"[DEMO] mode => topmost oldParent=0x{Hx(oldParent)} style=0x{style:X} exStyle=0x{exStyle:X} lastErr={Marshal.GetLastWin32Error()}");
-                LogHitTestProbe();
-            }
-
-            // 重新挂父后屏幕坐标基准可能变化（子窗坐标是父客户区坐标），重新套用工作区布局
-            ApplyLayout("mode-toggle");
-            UpdateWorkspace("mode-toggle");
         }
 
         /// <summary>
@@ -800,30 +748,10 @@ namespace WinUI2Demo
                         _frame.GoBack();
                     _selftestStep = 4;
                     break;
-                case 4 when elapsed >= 4000:
-                    Log("[SELFTEST] mode -> desktoppane");
-                    DemoBridge.ToggleMode();
-                    _selftestStep = 5;
-                    break;
-                case 5 when elapsed >= 5000:
-                    Log("[SELFTEST] mode -> topmost");
-                    DemoBridge.ToggleMode();
-                    _selftestStep = 6;
-                    break;
-                case 6 when elapsed >= 5800:
-                    Log("[SELFTEST] fill -> desktop (rcMonitor)");
-                    DemoBridge.ToggleFill();
-                    _selftestStep = 7;
-                    break;
-                case 7 when elapsed >= 6500:
-                    Log("[SELFTEST] fill -> work (rcWork)");
-                    DemoBridge.ToggleFill();
-                    _selftestStep = 8;
-                    break;
-                case 8 when elapsed >= 7200:
+                case 4 when elapsed >= 4800:
                     Log("[SELFTEST] close");
                     DemoBridge.Close();
-                    _selftestStep = 9;
+                    _selftestStep = 5;
                     break;
             }
         }
@@ -1356,7 +1284,9 @@ namespace WinUI2Demo
 
             long exStyle = (long)PInvoke.GetWindowLongPtr(hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
             exStyle &= ~(long)WS_EX_TOPMOST;
+            exStyle |= WS_EX_NOACTIVATE;
             PInvoke.SetWindowLongPtr(hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE, (nint)exStyle);
+            ApplyNoActivate(_xamlHwnd, "island-after-reparent");
 
             var oldParent = PInvoke.SetParent(hwnd, parent);
             Log($"[REPARENT] hwnd=0x{Hx(hwnd)} oldParent=0x{Hx(oldParent)} newParent=0x{Hx(parent)} style=0x{style:X} exStyle=0x{exStyle:X} lastErr={Marshal.GetLastWin32Error()}");
@@ -1368,6 +1298,54 @@ namespace WinUI2Demo
                 SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE |
                 (show ? SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW : (SET_WINDOW_POS_FLAGS)0) |
                 SET_WINDOW_POS_FLAGS.SWP_FRAMECHANGED);
+        }
+
+        /// <summary>前台窗口描述：hwnd + class + pid，便于确认“还是用户原来那个应用”。</summary>
+        private static string ForegroundDesc(nint fg)
+        {
+            if (fg == 0)
+                return "none";
+            var pid = 0u;
+            GetWindowThreadProcessId(fg, out pid);
+            return $"hwnd=0x{fg:X} class={ClassNameOf(fg)} pid={pid}";
+        }
+
+        internal static void LogForeground(string tag)
+        {
+            Log($"[FG] {tag} {ForegroundDesc((nint)GetForegroundWindow())}");
+        }
+
+        /// <summary>前台窗口变化采样：点击落在岛窗口上时也能源源不断读回，不依赖消息钩子。</summary>
+        private static void StartForegroundWatch()
+        {
+            if (s_fgTimer is not null)
+                return;
+            s_lastFg = (nint)GetForegroundWindow();
+            s_fgTimer = new System.Threading.Timer(_ => PollForeground(), null, 300, 300);
+            Log($"[FG] watch started {ForegroundDesc(s_lastFg)}");
+        }
+
+        private static void PollForeground()
+        {
+            if (Interlocked.Exchange(ref s_fgBusy, 1) == 1)
+                return;
+
+            try
+            {
+                var fg = (nint)GetForegroundWindow();
+                if (fg == s_lastFg)
+                    return;
+                s_lastFg = fg;
+                Log($"[FG] change {ForegroundDesc(fg)}");
+            }
+            catch
+            {
+                // 采样失败不影响主流程
+            }
+            finally
+            {
+                Interlocked.Exchange(ref s_fgBusy, 0);
+            }
         }
 
         /// <summary>
@@ -1642,6 +1620,8 @@ namespace WinUI2Demo
 
             Log($"[SHOW] hostVisible={(bool)PInvoke.IsWindowVisible(_host)} xamlVisible={(bool)PInvoke.IsWindowVisible(_xamlHwnd)}");
             LogRects();
+            LogForeground("startup-after");
+            StartForegroundWatch();
         }
 
         /// <summary>嵌入失败兜底：恢复为置顶浮层（WS_POPUP + WS_EX_TOPMOST），按工作区定位，保持可用。</summary>
@@ -1654,8 +1634,9 @@ namespace WinUI2Demo
             PInvoke.SetWindowLongPtr(_host, WINDOW_LONG_PTR_INDEX.GWL_STYLE, (nint)style);
 
             long exStyle = (long)PInvoke.GetWindowLongPtr(_host, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
-            exStyle |= WS_EX_TOPMOST | WS_EX_TOOLWINDOW;
+            exStyle |= WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
             PInvoke.SetWindowLongPtr(_host, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE, (nint)exStyle);
+            ApplyNoActivate(_xamlHwnd, "island-after-fallback");
 
             var oldParent = PInvoke.SetParent(_host, HWND.Null);
             _desktopMode = false;
@@ -1724,6 +1705,22 @@ namespace WinUI2Demo
         private static void LogInputMessage(MSG* msg)
         {
             uint id = msg->message;
+            if (id == WM_MOUSEMOVE)
+            {
+                if (!InputLogEnabled)
+                    return;
+                // 悬停诊断：限流 200 ms，避免淹没日志
+                var now = Stopwatch.GetTimestamp();
+                if (now - s_lastMoveLogTicks < Stopwatch.Frequency / 5)
+                    return;
+                s_lastMoveLogTicks = now;
+                var lp = (long)msg->lParam.Value;
+                var x = (int)(short)(lp & 0xFFFF);
+                var y = (int)(short)((lp >> 16) & 0xFFFF);
+                Log($"[INPUT] WM_MOUSEMOVE hwnd=0x{Hx(msg->hwnd)} x={x} y={y}");
+                return;
+            }
+
             if (id != WM_LBUTTONDOWN && id != WM_LBUTTONUP && id != WM_MOUSEACTIVATE &&
                 id != WM_NCHITTEST && id != WM_ACTIVATE && id != WM_SETFOCUS && id != WM_SETCURSOR &&
                 id != WM_POINTERDOWN && id != WM_POINTERUP)
@@ -1754,19 +1751,16 @@ namespace WinUI2Demo
                     break;
 
                 case WM_MOUSEACTIVATE:
-                    // 子窗口的 WM_MOUSEACTIVATE 默认会交给父窗口（Progman/explorer）裁决，
-                    // 桌面父窗通常不希望激活任何东西。这里自己返回 MA_ACTIVATE，保证点击后激活。
-                    Log($"[INPUT] WM_MOUSEACTIVATE on host hwnd=0x{Hx(hWnd)} => MA_ACTIVATE");
-                    return (LRESULT)MA_ACTIVATE;
+                    // 点击不激活：前台窗口保持用户原来那个应用（MA_NOACTIVATE 不会产生 WM_ACTIVATE）
+                    LogForeground("mouseactivate-before");
+                    Log($"[INPUT] WM_MOUSEACTIVATE on host hwnd=0x{Hx(hWnd)} => MA_NOACTIVATE");
+                    return (LRESULT)MA_NOACTIVATE;
 
                 case WM_HOTKEY:
                     switch ((int)wParam.Value)
                     {
                         case HotkeyTransparency:
                             DemoBridge.ToggleTransparency();
-                            break;
-                        case HotkeyMode:
-                            DemoBridge.ToggleMode();
                             break;
                         case HotkeyClose:
                             DemoBridge.Close();
@@ -1823,8 +1817,10 @@ namespace WinUI2Demo
             }
 
             UnregisterHotKey(_host, HotkeyTransparency);
-            UnregisterHotKey(_host, HotkeyMode);
             UnregisterHotKey(_host, HotkeyClose);
+
+            s_fgTimer?.Dispose();
+            s_fgTimer = null;
 
             if (!_host.IsNull)
                 PInvoke.DestroyWindow(_host);

@@ -1,0 +1,36 @@
+﻿[13:29:49.516] === IslandProbe ===
+[13:29:49.524] pid=22316 os=Microsoft Windows NT 10.0.26300.0
+[13:29:49.524] RoInitialize(STA) => hr=0x00000001
+[13:29:49.619] mode=workerw transparent=False hold=7000 captureAt=4500
+[13:29:49.679] WindowsXamlManager.InitializeForCurrentThread => True
+[13:29:49.682] Window.Current => Windows.UI.Xaml.Window
+[13:29:49.684] CoreWindow.GetForCurrentThread => Windows.UI.Core.CoreWindow
+[13:29:49.689] [CoreWindowInterop] hwnd=0x2D00F2
+[13:29:49.695] [RegisterClass] backdrop atom=49882 lastErr=0
+[13:29:49.707] [CreateWindow] backdrop hwnd=0x150B96 lastErr=0
+[13:29:49.709] [RegisterClass] host atom=49655 lastErr=0
+[13:29:49.710] [CreateWindow] host hwnd=0x1F0DDA exStyle=0x200080 lastErr=0
+[13:29:49.742] [DWS] created=True
+[13:29:49.749] [DWS] AttachToWindow(host) => 0x00000000
+[13:29:49.750] [DWS] island hwnd=0x800DE2
+[13:29:49.792] [DWS] Content set
+[13:29:49.793] [DWS] island sized to 520x380
+[13:29:49.795] [XST] set_IsBackgroundTransparent(False) => hr=0x00000000 readback=False
+[13:29:49.795] host dpi=144 coreHwnd=0x2D00F2 xamlHwnd=0x800DE2
+[13:29:49.796] [WORKERW] Progman=0x1015C
+[13:29:49.797] [WORKERW] SendMessage(Progman, 0x052C, 0, 0) => 0x0
+[13:29:49.798] [WORKERW] Progman child WorkerW=0xC0908 valid=True visible=True
+[13:29:49.801] [REPARENT] hwnd=0x150B96 oldParent=0x1000C newParent=0xC0908 style=0x54000000 exStyle=0x8000080 lastErr=0
+[13:29:49.802] [REPARENT] hwnd=0x1F0DDA oldParent=0x1000C newParent=0xC0908 style=0x44000000 exStyle=0x200080 lastErr=0
+[13:29:49.804] [WORKERW] parent=0xC0908 hostIsChild=True backdropIsChild=True
+[13:29:49.804] [SHOW] hostVisible=True xamlVisible=True backdropVisible=True
+[13:29:49.805] [RECT] host screen=(60,60,580,440)
+[13:29:49.806] [RECT] island screen=(60,60,580,440) root=0x1015C
+[13:29:54.320] [SAMPLE] dpi=144 hostRect=(60,60,520x380) backdrop=(20,20,600x460)
+[13:29:54.342] [SAMPLE] transparent_left (190,269) COLORREF=0x00FFFFFF RGB=(255,255,255)
+[13:29:54.355] [SAMPLE] semi_red_right (450,269) COLORREF=0x007F7FFF RGB=(255,127,127)
+[13:29:54.371] [SAMPLE] host_top_left (65,65) COLORREF=0x00FFFFFF RGB=(255,255,255)
+[13:29:54.388] [SAMPLE] backdrop_outside (30,30) COLORREF=0x00D7CBC1 RGB=(193,203,215)
+[13:29:54.404] [SAMPLE] desktop_reference (10,700) COLORREF=0x00655741 RGB=(65,87,101)
+[13:29:56.928] [CLEANUP] DesktopWindowXamlSource disposed
+[13:29:56.934] [CLEANUP] windows destroyed

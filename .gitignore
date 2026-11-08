@@ -1,0 +1,12 @@
+# 编译中间产物与输出
+**/bin/
+**/obj/
+
+# Visual Studio 缓存与用户文件
+.vs/
+*.user
+*.suo
+
+# 系统临时文件
+Thumbs.db
+.DS_Store

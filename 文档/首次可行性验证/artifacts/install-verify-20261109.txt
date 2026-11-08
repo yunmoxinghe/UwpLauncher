@@ -1,0 +1,140 @@
+install.ps1 安装链路分支实测（2026-11-09，本机 Windows 11 Build 26300）
+环境：DevMode=True，当前会话 Admin=False，ACP=65001，ConsentPromptBehaviorAdmin=0
+包：WinUI2Demo_1.0.0.0_x64.msix（10,102,787 字节）
+证书：CN=WinUI2DemoDev  指纹=91C06EBA2A8C0DCD1B87DE11039024D1662B6832  至 2027-11-09
+包内签名者指纹：91C06EBA2A8C0DCD1B87DE11039024D1662B6832（与 cer 一致）
+
+======================================================================
+[分支 1] 默认路径：自提升 + 机器级证书信任 + 签名安装
+命令：powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1
+前置：LocalMachine\TrustedPeople=False，LocalMachine\Root=False
+----------------------------------------------------------------------
+=== 1/5 环境与包校验 ===
+      包：...\dist\WinUI2Demo_1.0.0.0_x64.msix（10102787 字节）
+      开发者模式：True；当前会话管理员：False
+      证书：CN=WinUI2DemoDev  指纹=91C06EBA2A8C0DCD1B87DE11039024D1662B6832  有效期至=2027-11-09
+      包签名者指纹：91C06EBA2A8C0DCD1B87DE11039024D1662B6832
+PASS  证书与包签名者指纹一致（91C06EBA2A8C0DCD1B87DE11039024D1662B6832）
+
+=== 请求管理员权限（导入机器级信任存储必需） ===
+      若在 UAC 弹窗点「否」，脚本会继续走非提权路径（松散注册）
+PASS  提权子进程已结束，退出码 0
+
+=== 提权进程执行结果 ===
+      ExitCode=0
+      证书校验：PASS（指纹与包内签名一致）
+      证书导入：PASS（TrustedPeople + Root）
+      签名安装：PASS
+      采用路径：签名安装（提权 + 机器级证书信任）
+      PackageFullName=WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4
+      InstallLocation=C:\Program Files\WindowsApps\WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4
+      SignatureKind=Developer
+
+=== 结果汇总 ===
+      证书校验：PASS（指纹与包内签名一致）
+      提权：PASS（子进程退出码 0）
+EXITCODE=0
+
+======================================================================
+[分支 2] 证书已在机器级信任存储时的非提权签名安装
+命令：install.ps1 -NoElevate
+----------------------------------------------------------------------
+=== 1/5 环境与包校验 ===
+PASS  证书与包签名者指纹一致（91C06EBA2A8C0DCD1B87DE11039024D1662B6832）
+
+=== 2/5 清理同名旧注册 ===
+      移除（当前用户）：WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4
+PASS  已清理 1 个旧注册
+
+=== 3/5 签名安装（证书已在机器级信任存储，无需导入） ===
+      已安装：WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4
+      安装位置：C:\Program Files\WindowsApps\WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4
+PASS  签名安装成功
+
+=== 结果汇总 ===
+      证书校验：PASS（指纹与包内签名一致）
+      签名安装：PASS（证书已在 LocalMachine 信任存储）
+      采用路径：签名安装（提权 + 机器级证书信任）
+      PackageFullName：WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4
+      AUMID：WinUI2Demo_p06pf12qzbwg4!App
+EXITCODE=0
+
+======================================================================
+[分支 3] 证书未进机器级信任存储时的非提权兜底（松散注册）
+命令：install.ps1 -NoElevate
+前置：LocalMachine\TrustedPeople=False，LocalMachine\Root=False
+----------------------------------------------------------------------
+=== 1/5 环境与包校验 ===
+      开发者模式：True；当前会话管理员：False
+PASS  证书与包签名者指纹一致（91C06EBA2A8C0DCD1B87DE11039024D1662B6832）
+
+=== 2/5 清理同名旧注册 ===
+      移除（当前用户）：WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4
+PASS  已清理 1 个旧注册
+
+=== 3/5 签名安装结果 ===
+      未走签名安装：当前非管理员，证书未进机器级信任存储（TrustedPeople=False Root=False），导入需要管理员
+      继续尝试松散注册
+
+=== 4/5 松散注册（开发者模式） ===
+      注册目录：C:\Users\gold\AppData\Local\WinUI2Demo\layout（注册后必须保留，不能删）
+      已安装：WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4
+      安装位置：C:\Users\gold\AppData\Local\WinUI2Demo\layout
+PASS  松散注册成功（不需要证书，依赖开发者模式）
+
+=== 结果汇总 ===
+      证书校验：PASS（指纹与包内签名一致）
+      松散注册：PASS
+      采用路径：松散注册（开发者模式，目录 C:\Users\gold\AppData\Local\WinUI2Demo\layout）
+      PackageFullName：WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4
+      AUMID：WinUI2Demo_p06pf12qzbwg4!App
+EXITCODE=0
+
+======================================================================
+[分支 4] 证书与包签名者不匹配的保护
+命令：install.ps1 -NoElevate -Cer <临时生成的其它证书 4E20E416...>
+----------------------------------------------------------------------
+=== 1/5 环境与包校验 ===
+      证书：CN=NotWinUI2DemoDev  指纹=4E20E4169259C3D5C12B14E0ECC463F1A1111787  有效期至=2027-11-09
+      包签名者指纹：91C06EBA2A8C0DCD1B87DE11039024D1662B6832
+FAIL  证书与包签名者不一致：cer=4E20E4169259C3D5C12B14E0ECC463F1A1111787 / 包内=91C06EBA2A8C0DCD1B87DE11039024D1662B6832
+      不会导入这张证书，签名安装路径跳过，改走松散注册
+
+=== 3/5 签名安装结果 ===
+      未走签名安装：证书不可用（缺失或与包签名者不一致），不导入错误证书
+      继续尝试松散注册
+
+=== 4/5 松散注册（开发者模式） ===
+PASS  松散注册成功（不需要证书，依赖开发者模式）
+
+=== 结果汇总 ===
+      证书校验：FAIL（cer 与包内签名者不一致，已跳过签名路径）
+      松散注册：PASS
+      采用路径：松散注册（开发者模式，目录 C:\Users\gold\AppData\Local\WinUI2Demo\layout）
+EXITCODE=0
+
+临时证书已从 CurrentUser\My 删除，临时 .cer 已删除。
+
+======================================================================
+未实测项与说明
+- UAC 点「否」分支：本机 ConsentPromptBehaviorAdmin=0，管理员提权不弹窗，无法在不修改系统策略的前提下触发。
+  该分支的后续代码与 -NoElevate 完全一致（同一段兜底逻辑），已由分支 3 覆盖。
+- 安装完成后未自动启动 UI，未做焦点读回验证（按要求等待用户方便时间）。
+
+======================================================================
+[最终版本复测] 加入「框架包依赖显示」后的非提权签名安装
+命令：install.ps1 -NoElevate
+----------------------------------------------------------------------
+=== 1/5 环境与包校验 ===
+      包：...\dist\WinUI2Demo_1.0.0.0_x64.msix（10102787 字节）
+      开发者模式：True；当前会话管理员：False
+      WinUI 2.8 框架包：Microsoft.UI.Xaml.2.8_8.2511.26001.0_x64__8wekyb3d8bbwe
+      证书：CN=WinUI2DemoDev  指纹=91C06EBA2A8C0DCD1B87DE11039024D1662B6832  有效期至=2027-11-09
+      包签名者指纹：91C06EBA2A8C0DCD1B87DE11039024D1662B6832
+PASS  证书与包签名者指纹一致（91C06EBA2A8C0DCD1B87DE11039024D1662B6832）
+PASS  签名安装成功
+      安装位置：C:\Program Files\WindowsApps\WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4
+EXITCODE=0
+Get-AppxPackage：SignatureKind=Developer
+
+注：分支 1-4 采集于加入框架包显示行之前的版本；该改动只增加一行只读输出，不改变安装逻辑。

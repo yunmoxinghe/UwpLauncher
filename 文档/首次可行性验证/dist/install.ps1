@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     安装 WinUI2Demo：优先「提权 + 机器级证书信任 + 签名安装」，失败自动退回松散注册。
 
@@ -27,7 +27,9 @@ param(
     [string]$InstallDir = "",
     [switch]$SkipUninstall,
     [switch]$NoElevate,
-    [switch]$Elevated
+    [switch]$Elevated,
+    # 内部参数：提权子进程把结果汇总写到该文件，父进程读回打印
+    [string]$ResultPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -138,6 +140,19 @@ function Write-Summary {
     foreach ($line in $script:summary) { Write-Host "      $line" }
 }
 
+function Save-Result([int]$Code) {
+    if (-not $ResultPath) { return }
+    $lines = @("ExitCode=$Code")
+    foreach ($line in $script:summary) { $lines += $line }
+    $pkg = Get-InstalledPackage
+    if ($pkg) {
+        $lines += "PackageFullName=$($pkg.PackageFullName)"
+        $lines += "InstallLocation=$($pkg.InstallLocation)"
+        $lines += "SignatureKind=$($pkg.SignatureKind)"
+    }
+    try { Set-Content -Path $ResultPath -Value $lines -Encoding UTF8 } catch { }
+}
+
 function Complete([string]$Path) {
     $script:summary += "采用路径：$Path"
     Write-Summary
@@ -146,6 +161,7 @@ function Complete([string]$Path) {
         Write-Host "      PackageFullName：$($pkg.PackageFullName)"
         Write-Host "      AUMID：$($pkg.PackageFamilyName)!App"
     }
+    Save-Result 0
     exit 0
 }
 
@@ -157,6 +173,11 @@ Write-Host "      包：$Msix（$((Get-Item $Msix).Length) 字节）"
 $unlock = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" -ErrorAction SilentlyContinue
 $devMode = ($unlock.AllowDevelopmentWithoutDevLicense -eq 1)
 Write-Host "      开发者模式：$devMode；当前会话管理员：$($script:isAdmin)"
+
+# 包清单声明了 Microsoft.UI.Xaml.2.8 框架包依赖，缺它时 Add-AppxPackage 会报 0x80073CF3
+$framework = Get-AppxPackage -Name "Microsoft.UI.Xaml.2.8" -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($framework) { Write-Host "      WinUI 2.8 框架包：$($framework.PackageFullName)" }
+else { Write-Host "      WinUI 2.8 框架包：未安装（若安装报 0x80073CF3，需先补装 Microsoft.UI.Xaml.2.8）" }
 
 $cerThumb = $null
 if (Test-Path $Cer) {
@@ -191,13 +212,27 @@ else {
 if (-not $script:isAdmin -and -not $NoElevate -and -not $Elevated) {
     Write-Step "请求管理员权限（导入机器级信任存储必需）"
     $hostExe = (Get-Process -Id $PID).Path
-    $argStr = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Msix "{1}" -Cer "{2}" -LayoutZip "{3}" -InstallDir "{4}" -Elevated' -f `
-        $PSCommandPath, $Msix, $Cer, $LayoutZip, $InstallDir
+    $resultPath = Join-Path $env:TEMP ("WinUI2Demo-install-{0}.txt" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+    $argStr = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Msix "{1}" -Cer "{2}" -LayoutZip "{3}" -InstallDir "{4}" -Elevated -ResultPath "{5}"' -f `
+        $PSCommandPath, $Msix, $Cer, $LayoutZip, $InstallDir, $resultPath
     if ($SkipUninstall) { $argStr += ' -SkipUninstall' }
-    Write-Note "若在 UAC 弹窗点“否”，脚本会继续走非提权路径（松散注册）"
+    Write-Note "若在 UAC 弹窗点「否」，脚本会继续走非提权路径（松散注册）"
     try {
-        $child = Start-Process -FilePath $hostExe -Verb RunAs -ArgumentList $argStr -Wait -PassThru
+        # 子进程窗口隐藏，结果通过 -ResultPath 回传，避免控制台一闪而过看不到 HRESULT
+        $child = Start-Process -FilePath $hostExe -Verb RunAs -ArgumentList $argStr -Wait -PassThru -WindowStyle Hidden
         Write-Ok "提权子进程已结束，退出码 $($child.ExitCode)"
+        if (Test-Path $resultPath) {
+            Write-Step "提权进程执行结果"
+            Get-Content $resultPath -Encoding UTF8 | ForEach-Object { Write-Host "      $_" }
+            Remove-Item $resultPath -Force -ErrorAction SilentlyContinue
+        }
+        else {
+            Write-Note "提权子进程未生成结果文件（可能中途被关闭或未启动成功）"
+        }
+        if ($child.ExitCode -eq 0 -and -not (Get-InstalledPackage)) {
+            Write-Fail "子进程报告成功但查不到已安装的 $script:pkgName"
+            exit 1
+        }
         $script:summary += "提权：PASS（子进程退出码 $($child.ExitCode)）"
         Write-Summary
         exit $child.ExitCode
@@ -301,7 +336,7 @@ else {
 if ($signedInstalled) { Complete "签名安装（提权 + 机器级证书信任）" }
 
 Write-Step "3/5 签名安装结果"
-if ($skipReason) { Write-Note "跳过/失败原因：$skipReason" }
+if ($skipReason) { Write-Note "未走签名安装：$skipReason" }
 Write-Note "继续尝试松散注册"
 
 # ---------- 4) 松散注册（兜底） ----------
@@ -332,8 +367,10 @@ catch {
 # ---------- 5) 失败汇总 ----------
 Write-Step "5/5 安装失败"
 Write-Summary
+Save-Result 1
 Write-Host "`n      处理建议：" -ForegroundColor Yellow
 Write-Host "      1) 用管理员身份重跑本脚本（会自动导入机器级信任证书后签名安装）" -ForegroundColor Yellow
 Write-Host "      2) 或开启开发者模式后重跑（走松散注册，不需要证书）" -ForegroundColor Yellow
-Write-Host "      3) 仍有问题请附上上面的 HRESULT" -ForegroundColor Yellow
+Write-Host "      3) 若报 0x80073CF3，先安装 Microsoft.UI.Xaml.2.8 框架包（本脚本第 1 步会显示是否已装）" -ForegroundColor Yellow
+Write-Host "      4) 仍有问题请附上上面的 HRESULT" -ForegroundColor Yellow
 exit 1

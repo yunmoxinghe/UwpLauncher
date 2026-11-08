@@ -331,3 +331,36 @@ XAML 内容：左右两列，左列无背景，右列 50% 红（`#80FF0000`）�
 
 - 一级未失败 → 不启动二级 C++/WinRT。交付继续用 CoreCLR（打包简单、已验收）；AOT 作为可选的“低常驻”构建保留。
 - 下一轮内存优化应针对条目模型与图标缓存，而不是运行时。
+
+## 安装链路：MSIX 签名安装打通（2026-11-09）
+
+### 现象与根因
+
+- 用户装 `WinUI2Demo_1.0.0.0_x64.msix` 报 `0x800B010A`：发布者证书链不受信任。此前非管理员会话只把证书导进 `CurrentUser\TrustedPeople`，而 AppX 部署服务校验的是**机器级**信任存储，且自签名证书的根就是它自己，只进 `TrustedPeople` 仍会因根不受信任报 `0x800B0109`。
+- 结论：签名安装必须 **提权 + 证书同时进 `LocalMachine\TrustedPeople` 与 `LocalMachine\Root`**；两者缺一不可。
+
+### 脚本改造（`dist/install.ps1`）
+
+1. 先用包内 `AppxSignature.p7x` 解出签名者指纹，与 `.cer` 指纹比对；不一致就不导入（避免装错信任）。
+2. 未提权时 `Start-Process -Verb RunAs` 自提升，子进程窗口隐藏，结果经 `-ResultPath` 临时文件回传，父进程打印后再退出，避免“控制台一闪而过看不到 HRESULT”。
+3. 提权后导入两处机器级存储 → 校验导入结果 → `Add-AppxPackage`。
+4. 任一环节失败或 UAC 被拒 → 自动回退开发者模式松散注册。
+5. 脚本改为 UTF-8 with BOM，Windows PowerShell 5.1 在非 UTF-8 区域设置下也能正确解码中文。
+
+### 实测结果（四条分支全通过）
+
+| 分支 | 命令 | 结果 |
+| --- | --- | --- |
+| 默认：提权 + 双存储信任 + 签名安装 | `install.ps1` | `证书导入：PASS`、`签名安装：PASS`；`InstallLocation=C:\Program Files\WindowsApps\WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4`，`SignatureKind=Developer` |
+| 已信任时的非提权签名安装 | `install.ps1 -NoElevate` | 跳过导入，`Add-AppxPackage` PASS |
+| 未信任时的非提权兜底 | `install.ps1 -NoElevate`（干净信任存储） | 打印 `TrustedPeople=False Root=False` → 签名路径跳过 → 松散注册 PASS |
+| 证书不匹配保护 | `install.ps1 -NoElevate -Cer <其它证书>` | 打印两侧指纹并拒绝导入 → 松散注册 PASS |
+
+- 原始输出：`artifacts/install-verify-20261109.txt`。
+- 副作用（如实记录）：`CN=WinUI2DemoDev` 公钥已写入本机 `LocalMachine\TrustedPeople` 与 `LocalMachine\Root`。这意味着该自签名私钥签出的任意包在本机受信任；仅在开发机保留，卸载证书命令写进 `dist/使用说明.md`。
+
+### 未验证项
+
+- UAC 点「否」分支：本机 `ConsentPromptBehaviorAdmin=0`，管理员提权不弹窗，无法在不改系统策略的前提下触发；其后续代码与 `-NoElevate` 相同，已由兜底分支覆盖。
+- 安装完成后未自动启动 UI，焦点读回与真实点击验证仍待用户指定的时间窗。
+

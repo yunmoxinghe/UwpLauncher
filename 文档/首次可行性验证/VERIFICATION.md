@@ -45,14 +45,14 @@ internal partial interface IXamlSourceTransparency // This is the same interface
 
 | 作用 | 位置 | 关键点 |
 |---|---|---|
-| 宿主无 GDI 重定向表面 | [XamlIslandHostWindow.cs L116-L120](file:///C:/Users/gold/source/repos/_research/DesktopFlyouts/src/DesktopFlyouts.Shared/XamlIslandHostWindow.cs#L116-L120) | `WS_POPUP` + `WS_EX_NOREDIRECTIONBITMAP \| WS_EX_TOOLWINDOW \| WS_EX_TOPMOST` |
-| 绑定 XAML 岛到 HWND | [L438-L448](file:///C:/Users/gold/source/repos/_research/DesktopFlyouts/src/DesktopFlyouts.Shared/XamlIslandHostWindow.cs#L438-L448) | QI `IDesktopWindowXamlSourceNative2` → `AttachToWindow(HWnd)` → `get_WindowHandle` |
-| 取 XAML CoreWindow 的 HWND | [L458-L463](file:///C:/Users/gold/source/repos/_research/DesktopFlyouts/src/DesktopFlyouts.Shared/XamlIslandHostWindow.cs#L458-L463) | `CoreWindow.GetForCurrentThread()` → QI `ICoreWindowInterop` |
-| 尺寸/主题消息转发 | [L478-L500](file:///C:/Users/gold/source/repos/_research/DesktopFlyouts/src/DesktopFlyouts.Shared/XamlIslandHostWindow.cs#L478-L500) | `WM_SIZE` 同步岛 HWND 后 `SendMessage(coreHwnd, WM_SIZE, ...)`；转发 `WM_SETTINGCHANGE/WM_THEMECHANGED` |
-| 键盘消息预翻译 | [L336-L340](file:///C:/Users/gold/source/repos/_research/DesktopFlyouts/src/DesktopFlyouts.Shared/XamlIslandHostWindow.cs#L336-L340) | `IDesktopWindowXamlSourceNative2.PreTranslateMessage` |
-| 形状裁剪（非透明必需） | [L190-L194](file:///C:/Users/gold/source/repos/_research/DesktopFlyouts/src/DesktopFlyouts.Shared/XamlIslandHostWindow.cs#L190-L194) | `CreateRectRgn` + `SetWindowRgn` |
-| 永不激活（可选） | [L364-L365](file:///C:/Users/gold/source/repos/_research/DesktopFlyouts/src/DesktopFlyouts.Shared/XamlIslandHostWindow.cs#L364-L365) | `WS_EX_NOACTIVATE` 增删 |
-| 毛玻璃观感（内容侧） | [DesktopFlyout.xaml L64-L80](file:///C:/Users/gold/source/repos/_research/DesktopFlyouts/src/DesktopFlyouts.Uwp/DesktopFlyout.xaml#L64-L80)、[MainDesktopFlyout.xaml L16-L39](file:///C:/Users/gold/source/repos/_research/DesktopFlyouts/samples/DesktopFlyouts.Uwp.Sample.TrayHost/MainDesktopFlyout.xaml#L16-L39) | 岛背景 `AcrylicBrush`（深色 `TintOpacity=0.5 / TintLuminosityOpacity=0.96`，浅色 `0.0 / 0.9`） |
+| 宿主无 GDI 重定向表面 | [XamlIslandHostWindow.cs L116-L120](https://github.com/0x5bfa/DesktopFlyouts/blob/6cdcef5538db19e044ac20ba6fb010f322ef2881/src/DesktopFlyouts.Shared/XamlIslandHostWindow.cs#L116-L120) | `WS_POPUP` + `WS_EX_NOREDIRECTIONBITMAP \| WS_EX_TOOLWINDOW \| WS_EX_TOPMOST` |
+| 绑定 XAML 岛到 HWND | [L438-L448](https://github.com/0x5bfa/DesktopFlyouts/blob/6cdcef5538db19e044ac20ba6fb010f322ef2881/src/DesktopFlyouts.Shared/XamlIslandHostWindow.cs#L438-L448) | QI `IDesktopWindowXamlSourceNative2` → `AttachToWindow(HWnd)` → `get_WindowHandle` |
+| 取 XAML CoreWindow 的 HWND | [L458-L463](https://github.com/0x5bfa/DesktopFlyouts/blob/6cdcef5538db19e044ac20ba6fb010f322ef2881/src/DesktopFlyouts.Shared/XamlIslandHostWindow.cs#L458-L463) | `CoreWindow.GetForCurrentThread()` → QI `ICoreWindowInterop` |
+| 尺寸/主题消息转发 | [L478-L500](https://github.com/0x5bfa/DesktopFlyouts/blob/6cdcef5538db19e044ac20ba6fb010f322ef2881/src/DesktopFlyouts.Shared/XamlIslandHostWindow.cs#L478-L500) | `WM_SIZE` 同步岛 HWND 后 `SendMessage(coreHwnd, WM_SIZE, ...)`；转发 `WM_SETTINGCHANGE/WM_THEMECHANGED` |
+| 键盘消息预翻译 | [L336-L340](https://github.com/0x5bfa/DesktopFlyouts/blob/6cdcef5538db19e044ac20ba6fb010f322ef2881/src/DesktopFlyouts.Shared/XamlIslandHostWindow.cs#L336-L340) | `IDesktopWindowXamlSourceNative2.PreTranslateMessage` |
+| 形状裁剪（非透明必需） | [L190-L194](https://github.com/0x5bfa/DesktopFlyouts/blob/6cdcef5538db19e044ac20ba6fb010f322ef2881/src/DesktopFlyouts.Shared/XamlIslandHostWindow.cs#L190-L194) | `CreateRectRgn` + `SetWindowRgn` |
+| 永不激活（可选） | [L364-L365](https://github.com/0x5bfa/DesktopFlyouts/blob/6cdcef5538db19e044ac20ba6fb010f322ef2881/src/DesktopFlyouts.Shared/XamlIslandHostWindow.cs#L364-L365) | `WS_EX_NOACTIVATE` 增删 |
+| 毛玻璃观感（内容侧） | [DesktopFlyout.xaml L64-L80](https://github.com/0x5bfa/DesktopFlyouts/blob/6cdcef5538db19e044ac20ba6fb010f322ef2881/src/DesktopFlyouts.Uwp/DesktopFlyout.xaml#L64-L80)、[MainDesktopFlyout.xaml L16-L39](https://github.com/0x5bfa/DesktopFlyouts/blob/6cdcef5538db19e044ac20ba6fb010f322ef2881/samples/DesktopFlyouts.Uwp.Sample.TrayHost/MainDesktopFlyout.xaml#L16-L39) | 岛背景 `AcrylicBrush`（深色 `TintOpacity=0.5 / TintLuminosityOpacity=0.96`，浅色 `0.0 / 0.9`） |
 
 ### 1.3 魔法数字 / IID 清单
 
@@ -66,7 +66,7 @@ internal partial interface IXamlSourceTransparency // This is the same interface
 | `Translation="0,0,36"` | `0,0,36` | `ThemeShadow` 的 Z 位移（纯视觉，与透明无关） |
 | Acrylic 参数 | `0.5`、`0.96`、`0.9`、`0.8`、`0.0`；`#1C1C1C`、`#202020`、`#EEEEEE`、`#F3F3F3` | 深/浅/强调色的毛玻璃材质 |
 
-全部 IID 的字节数组定义见 [ManualDefinitions.cs L44-L58](file:///C:/Users/gold/source/repos/_research/DesktopFlyouts/src/DesktopFlyouts.Shared/Helpers/ManualDefinitions.cs#L44-L58)。
+全部 IID 的字节数组定义见 [ManualDefinitions.cs L44-L58](https://github.com/0x5bfa/DesktopFlyouts/blob/6cdcef5538db19e044ac20ba6fb010f322ef2881/src/DesktopFlyouts.Shared/Helpers/ManualDefinitions.cs#L44-L58)。
 透明功能由 commit `26f6612`（2025-12-06，“Pre-translate hwnd msg and fix the flyout visual”）引入。
 
 ### 1.4 没有用什么（重要）
@@ -83,18 +83,18 @@ internal partial interface IXamlSourceTransparency // This is the same interface
 
 ### 2.1 工程与工具链
 
-最小工程位于 [src/IslandProbe](file:///C:/Users/gold/source/repos/UwpLauncher/文档/首次可行性验证/src/IslandProbe)：
+最小工程位于 [src/IslandProbe](src/IslandProbe)：
 
-- [IslandProbe.csproj](file:///C:/Users/gold/source/repos/UwpLauncher/文档/首次可行性验证/src/IslandProbe/IslandProbe.csproj)：`net10.0-windows10.0.26100.0`、`<UseUwp>true</UseUwp>`、`Microsoft.UI.Xaml 2.8.7`、`CsWinRT 2.2.0`、`CsWin32 0.3.275`（与 DesktopFlyouts 同类 UWP XAML Islands 路径，非 WinUI3）
-- [Program.cs](file:///C:/Users/gold/source/repos/UwpLauncher/文档/首次可行性验证/src/IslandProbe/Program.cs)：`WindowsXamlManager.InitializeForCurrentThread()` → `Window.Current` → `DesktopWindowXamlSource` → `IsBackgroundTransparent`
-- [IXamlSourceTransparency.cs](file:///C:/Users/gold/source/repos/UwpLauncher/文档/首次可行性验证/src/IslandProbe/IXamlSourceTransparency.cs)：按 IID 手工定义
-- [NativeMethods.json](file:///C:/Users/gold/source/repos/UwpLauncher/文档/首次可行性验证/src/IslandProbe/NativeMethods.json)：与 DesktopFlyouts 一致（`useSafeHandles=false`、禁用友好重载、COM 源生成 + `PreserveSig`）
+- [IslandProbe.csproj](src/IslandProbe/IslandProbe.csproj)：`net10.0-windows10.0.26100.0`、`<UseUwp>true</UseUwp>`、`Microsoft.UI.Xaml 2.8.7`、`CsWinRT 2.2.0`、`CsWin32 0.3.275`（与 DesktopFlyouts 同类 UWP XAML Islands 路径，非 WinUI3）
+- [Program.cs](src/IslandProbe/Program.cs)：`WindowsXamlManager.InitializeForCurrentThread()` → `Window.Current` → `DesktopWindowXamlSource` → `IsBackgroundTransparent`
+- [IXamlSourceTransparency.cs](src/IslandProbe/IXamlSourceTransparency.cs)：按 IID 手工定义
+- [NativeMethods.json](src/IslandProbe/NativeMethods.json)：与 DesktopFlyouts 一致（`useSafeHandles=false`、禁用友好重载、COM 源生成 + `PreserveSig`）
 
 构建命令（本机已验证成功）：
 
 ```powershell
 & "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" `
-  "C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\src\IslandProbe\IslandProbe.csproj" `
+  "文档/首次可行性验证/src/IslandProbe/IslandProbe.csproj" `
   /restore /p:Platform=x64 /p:Configuration=Debug
 ```
 
@@ -116,7 +116,7 @@ internal partial interface IXamlSourceTransparency // This is the same interface
 - 混合算式自洽：`true` 的红列 = 50% 红 + 绿 → (127.5+0, 0+127.5, 0) ≈ (128,127,0)；`false` 的红列 = 50% 红 + 白 → (255,127,127)。
 - **结论：透明成立。** 关闭时并非“黑色/全透明”，而是 XAML 的不透明白底，说明开关确实控制 XAML 岛背景绘制。
 
-截图：[topmost-on.png](computer://C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\artifacts\topmost-on.png) / [topmost-off.png](computer://C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\artifacts\topmost-off.png)（裁剪对照：[topmost-on-crop.png](computer://C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\artifacts\topmost-on-crop.png)）
+截图：[topmost-on.png](artifacts\topmost-on.png) / [topmost-off.png](artifacts\topmost-off.png)（裁剪对照：[topmost-on-crop.png](artifacts\topmost-on-crop.png)）
 
 ---
 
@@ -168,7 +168,7 @@ Progman 0x1015C (visible)
 
 **结论：`SetParent` 到 Progman 子 WorkerW 后，透明度仍然生效。**
 
-截图：[workerw-on2.png](computer://C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\artifacts\workerw-on2.png) / [workerw-off2.png](computer://C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\artifacts\workerw-off2.png)（裁剪对照：[workerw-on-crop.png](computer://C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\artifacts\workerw-on-crop.png)）
+截图：[workerw-on2.png](artifacts\workerw-on2.png) / [workerw-off2.png](artifacts\workerw-off2.png)（裁剪对照：[workerw-on-crop.png](artifacts\workerw-on-crop.png)）
 
 ### 3.5 额外异常（如实记录）
 
@@ -185,16 +185,16 @@ Progman 0x1015C (visible)
 ```powershell
 # 1) 构建
 & "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" `
-  "C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\src\IslandProbe\IslandProbe.csproj" `
+  "文档/首次可行性验证/src/IslandProbe/IslandProbe.csproj" `
   /restore /p:Platform=x64 /p:Configuration=Debug
 
 # 2) 运行（脚本会自动截图；workerw 模式会自动最小化窗口并在结束时还原）
 powershell -ExecutionPolicy Bypass -File `
-  "C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\scripts\run-probe.ps1" `
+  "文档/首次可行性验证/scripts/run-probe.ps1" `
   -Mode topmost -Transparent on
 
 powershell -ExecutionPolicy Bypass -File `
-  "C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\scripts\run-probe.ps1" `
+  "文档/首次可行性验证/scripts/run-probe.ps1" `
   -Mode workerw -Transparent on
 ```
 
@@ -210,7 +210,7 @@ powershell -ExecutionPolicy Bypass -File `
 | `artifacts/workerw-on.log` | 第一次 WorkerW 失败（`ERROR_INVALID_PARAMETER 87`） |
 | `artifacts/workerw-on2.log` / `workerw-off2.log` | 修正后的 WorkerW 成功复测 |
 | `artifacts/*.png` | 4 组截图与 700x500 裁剪图 |
-| [LEDGER.md](file:///C:/Users/gold/source/repos/UwpLauncher/文档/首次可行性验证/LEDGER.md) | 分阶段台账（含环境、行号、失败与结论） |
+| [LEDGER.md](LEDGER.md) | 分阶段台账（含环境、行号、失败与结论） |
 
 ---
 

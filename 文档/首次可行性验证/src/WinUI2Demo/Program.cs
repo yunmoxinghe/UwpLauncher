@@ -93,8 +93,16 @@ namespace WinUI2Demo
 
         private static StreamWriter _log = StreamWriter.Null;
         private static readonly object s_logLock = new();
-        private static string _mode = "topmost";
+        // v1.0 默认形态：启动即嵌入桌面（可点击的 desktoppane）+ 透明开启；--mode/--transparent 仍可覆盖
+        private static string _mode = "desktoppane";
         private static bool _transparent = true;
+        // 启动时序：Main 起点的统一相对时间戳（毫秒），用于证明“创建 → Loaded → 首帧 → 动画”的顺序
+        private static readonly Stopwatch s_startupWatch = new();
+        internal static bool ShellLoaded;
+        /// <summary>启动入场动画期间（隐藏创建→首帧→动画开始）暂停 UI 心跳统计，避免把启动闸门算成喂入停顿。</summary>
+        internal static volatile bool StartupRevealInProgress;
+        private static bool _firstRenderingTickLogged;
+        private static int _frameTicks;
         private static bool _selftest;
         private static bool _exitRequested;
         private static bool _desktopMode;
@@ -216,6 +224,8 @@ namespace WinUI2Demo
         internal static bool IsHostOccluded => s_occState ?? false;
         /// <summary>性能口径复测时可关闭（--occ 0）：避免 IDE/终端窗口盖住桌面时干扰枚举批次。</summary>
         internal static bool OcclusionEnabled = true;
+        /// <summary>诊断开关（--icons 0）：跳过 Shell 缩略图，用于把“网格布局代价”和“图标解码代价”拆开测。</summary>
+        internal static bool IconsEnabled = true;
 
         private static System.Threading.Timer? s_occTimer;
         private static int s_occBusy;
@@ -245,6 +255,15 @@ namespace WinUI2Demo
         [DllImport("psapi.dll")]
         private static extern bool EmptyWorkingSet(nint hProcess);
 
+        // 首帧判据的“提交”侧证据：DwmFlush 会等到 DWM 完成一次合成，
+        // 比单纯的 CompositionTarget.Rendering（帧生成前回调）更接近“已上屏”。
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmFlush();
+
+        private const int StartupHiddenFrameWaitMs = 250;
+        // 100k 项网格的首次“带内容绘制”实测约 400-600ms，留足余量；超时则直接降级播动画
+        private const int StartupShownFrameWaitMs = 1_200;
+
         [STAThread]
         private static int Main(string[] args)
         {
@@ -272,8 +291,9 @@ namespace WinUI2Demo
                 // 无法写日志时仍继续，输出会丢失
             }
 
-            Log("=== WinUI2Demo ===");
-            Log($"pid={Environment.ProcessId} os={Environment.OSVersion.VersionString}");
+            s_startupWatch.Start();
+            Log("=== WinUI2Demo v1.0 ===");
+            Log($"{StartupTag()} pid={Environment.ProcessId} os={Environment.OSVersion.VersionString}");
 
             var hr = PInvoke.RoInitialize(RO_INIT_TYPE.RO_INIT_SINGLETHREADED);
             Log($"RoInitialize(STA) => hr=0x{hr.Value:X8}");
@@ -285,6 +305,10 @@ namespace WinUI2Demo
             _log.Flush();
             return 0;
         }
+
+        internal static long StartupMs() => s_startupWatch.IsRunning ? (long)s_startupWatch.ElapsedMilliseconds : 0;
+
+        private static string StartupTag() => $"[STARTUP] t={StartupMs()}ms";
 
         private static void ParseArgs(string[] args)
         {
@@ -316,6 +340,8 @@ namespace WinUI2Demo
 
             // --occ 0：性能/内存口径复测时关闭遮挡降级，避免桌面被 IDE/终端盖住时干扰枚举批次
             OcclusionEnabled = GetArgValue(args, "--occ") != "0";
+            // --icons 0：只做诊断，跳过 Shell 缩略图解码
+            IconsEnabled = GetArgValue(args, "--icons") != "0";
         }
 
         private static string? GetArgValue(string[] args, string name)
@@ -350,12 +376,23 @@ namespace WinUI2Demo
                 TryLoadWinUI2Resources();
 
                 CreateHostWindow();
+                Log($"{StartupTag()} window created hidden hwnd=0x{Hx(_host)}");
+
                 InitializeXamlIsland();
+                Log($"{StartupTag()} island content set hwnd=0x{Hx(_xamlHwnd)}");
 
                 // 岛一律先以透明态初始化。实测：在子窗嵌入 Progman 的模式下，
                 // 启动阶段就把 IsBackgroundTransparent 置 false 会让整个岛不渲染；
                 // 先把窗口显示出来、再写 false 则正常（与热键切换等价）。
-                TrySetIsBackgroundTransparent(true);
+                var transparencyOk = TrySetIsBackgroundTransparent(_transparent);
+                Log($"{StartupTag()} transparency applied ok={transparencyOk} requested={_transparent}");
+                if (!transparencyOk && _transparent)
+                {
+                    // 透明 API 不可用：保持可用，改为不透明深色底，避免内容不可读
+                    _transparent = false;
+                    _shell?.SetOpaqueFallback();
+                    Log("[FALLBACK] transparency-unavailable => opaque island (window stays usable)");
+                }
 
                 Log($"host dpi={PInvoke.GetDpiForWindow(_host)} coreHwnd=0x{Hx(_coreHwnd)} xamlHwnd=0x{Hx(_xamlHwnd)}");
 
@@ -364,28 +401,41 @@ namespace WinUI2Demo
                 if (_mode == "workerw" || _mode == "desktoppane")
                 {
                     RegisterDemoHotkeys();
-                    if (_mode == "workerw")
-                        ReparentToWorkerW();
+                    var embedOk = _mode == "workerw" ? ReparentToWorkerW() : ReparentToDesktopPane();
+                    if (embedOk)
+                    {
+                        _desktopMode = true;
+                        Log($"{StartupTag()} desktop embed ok mode={_mode}");
+                    }
                     else
-                        ReparentToDesktopPane();
+                    {
+                        // 嵌入失败：退化为置顶窗口，保持功能可用（点击/透明/退出都不受影响）
+                        FallbackToTopmost($"desktop-embed-failed[{_mode}]");
+                    }
 
-                    _desktopMode = true;
                     LogDesktopStructure();
                 }
-
-                ShowWindows();
-                if (_mode != "workerw" && _mode != "desktoppane")
+                else
+                {
                     RegisterDemoHotkeys();
+                }
+
+                // 先隐藏完成布局（不要在这里 Show），后续由 RunStartupReveal 在首帧后显示
+                ApplyLayout("startup", show: false);
+                UpdateWorkspace("startup");
+                Log($"{StartupTag()} layout done (host still hidden)");
 
                 if (!_transparent)
                 {
-                    // 窗口已可见，此时再写 false 才与热键切换路径一致
-                    ApplyTransparency();
+                    // 窗口显示后再写 false 才与热键切换路径一致（这里先记录意图，显示后执行）
                     Log("[XST] deferred opaque apply after show");
                 }
 
-                ApplyLayout("startup");
-                UpdateWorkspace("startup");
+                RunStartupReveal();
+
+                if (!_transparent)
+                    ApplyTransparency();
+
                 StartOcclusionWatch();
 
                 RunInteractiveLoop();
@@ -550,8 +600,12 @@ namespace WinUI2Demo
                 _shell = shell;
                 _frame = shell.ContentFrame;
                 AttachFrameLogging(_frame);
+                // v1.0：日志挂好后再导航，确保 [NAV] 记录可用于启动时序核对
+                shell.NavigateHome();
+                // 首帧之前就让内容透明并下移：窗口显示时不可能画出未布局的白底
+                shell.PrepareEntrance();
                 Log($"[DEMO] DemoShell created, content={_frame.Content?.GetType().FullName ?? "NULL"} " +
-                    $"backStack={_frame.BackStackDepth} canGoBack={_frame.CanGoBack}");
+                    $"backStack={_frame.BackStackDepth} canGoBack={_frame.CanGoBack} t={StartupMs()}ms");
                 MemProbe.Log("idle", 0, 0, 0, 0);
                 return shell;
             }
@@ -666,8 +720,9 @@ namespace WinUI2Demo
                 $"页面: {page}    返回栈: {stack}    可返回: {(canBack ? "是" : "否")}    " +
                 $"布局: {(_layoutFixed ? "固定窗口" : _fillDesktop ? "铺满桌面" : "铺满工作区")}\n" +
                 $"包: {package}\n" +
+                $"启动时序: window={StartupMs()}ms shellLoaded={ShellLoaded} frameTicks={_frameTicks}\n" +
                 "快捷键: Ctrl+F2 透明 | Ctrl+F3 置顶/桌面 | Ctrl+F4 退出";
-            _shell?.UpdateStatus(text, _transparent, _desktopMode, _fillDesktop, _workspaceText);
+            _shell?.UpdateStatus(text, _transparent, _workspaceText);
         }
 
         private static void RegisterDemoHotkeys()
@@ -682,8 +737,14 @@ namespace WinUI2Demo
         {
             if (!_desktopMode)
             {
-                ReparentToDesktopPane();
-                _desktopMode = true;
+                if (ReparentToDesktopPane())
+                {
+                    _desktopMode = true;
+                }
+                else
+                {
+                    FallbackToTopmost("desktop-embed-failed[toggle]");
+                }
             }
             else
             {
@@ -779,7 +840,7 @@ namespace WinUI2Demo
             TrySetIsBackgroundTransparent(true);
         }
 
-        private static void TrySetIsBackgroundTransparent(bool value)
+        private static bool TrySetIsBackgroundTransparent(bool value)
         {
             try
             {
@@ -787,7 +848,7 @@ namespace WinUI2Demo
                 if (window is null)
                 {
                     Log("[XST] FAILED: Window.Current is NULL, cannot QI IXamlSourceTransparency");
-                    return;
+                    return false;
                 }
 
                 var ptr = ((IWinRTObject)window).NativeObject.ThisPtr;
@@ -802,32 +863,36 @@ namespace WinUI2Demo
                 xst.get_IsBackgroundTransparent(out var readback);
                 _transparentReadback = readback;
                 Log($"[XST] set_IsBackgroundTransparent({value}) => hr=0x{setHr.Value:X8} readback={readback}");
+                return setHr.Value >= 0 && readback == value;
             }
             catch (Exception ex)
             {
                 Log($"[XST] FAILED to set IsBackgroundTransparent={value}: {ex.GetType().Name}: {ex.Message}");
+                return false;
             }
         }
 
-        private static void ReparentToWorkerW()
+        private static bool ReparentToWorkerW()
         {
             _desktoppane = false;
             _workerW = FindWorkerW();
             if (_workerW.IsNull)
             {
                 Log("[WORKERW] not found, keep top-level windows");
-                return;
+                return false;
             }
 
             // 本机 WorkerW 内部有壁纸合成子窗，HWND_BOTTOM 会被其遮住，放在 HWND_TOP
-            ReparentWindow(_host, _workerW, HostX, HostY, HostW, HostH, bottom: false);
+            ReparentWindow(_host, _workerW, HostX, HostY, HostW, HostH, bottom: false, show: false);
 
             PInvoke.SetWindowPos(
                 _host, InsertAfterTop, HostX, HostY, HostW, HostH,
-                SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW);
+                SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE);
 
-            Log($"[WORKERW] parent=0x{Hx(_workerW)} hostIsChild={(bool)PInvoke.IsChild(_workerW, _host)}");
+            var ok = (bool)PInvoke.IsChild(_workerW, _host);
+            Log($"[WORKERW] parent=0x{Hx(_workerW)} hostIsChild={ok}");
             LogHitTestProbe();
+            return ok;
         }
 
         /// <summary>
@@ -836,29 +901,30 @@ namespace WinUI2Demo
         /// 挂在 WorkerW 里的窗口命中测试永远落到 DefView，鼠标消息到不了宿主；
         /// 放到 DefView 之上后点击真实命中宿主，而透明区域下方仍是图标与壁纸（视觉不变）。
         /// </summary>
-        private static void ReparentToDesktopPane()
+        private static bool ReparentToDesktopPane()
         {
             var progman = PInvoke.FindWindow(S("Progman"), default);
             if (progman.IsNull)
             {
                 Log("[DESKTOPPANE] Progman not found, stay topmost");
-                return;
+                return false;
             }
 
             var defView = PInvoke.FindWindowEx(progman, HWND.Null, S("SHELLDLL_DefView"), default);
 
-            ReparentWindow(_host, progman, HostX, HostY, HostW, HostH, bottom: false);
+            ReparentWindow(_host, progman, HostX, HostY, HostW, HostH, bottom: false, show: false);
 
             // Progman 子窗 Z 序最前 = 高于 SHELLDLL_DefView；仍受 Progman 约束，不会盖到普通应用
             PInvoke.SetWindowPos(
                 _host, InsertAfterTop, HostX, HostY, HostW, HostH,
                 SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE |
-                SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW |
                 SET_WINDOW_POS_FLAGS.SWP_FRAMECHANGED);
 
-            _desktoppane = true;
-            Log($"[DESKTOPPANE] parent=0x{Hx(progman)} defView=0x{Hx(defView)} hostIsChild={(bool)PInvoke.IsChild(progman, _host)}");
+            var ok = (bool)PInvoke.IsChild(progman, _host);
+            _desktoppane = ok;
+            Log($"[DESKTOPPANE] parent=0x{Hx(progman)} defView=0x{Hx(defView)} hostIsChild={ok}");
             LogHitTestProbe();
+            return ok;
         }
 
         /// <summary>桌面结构诊断：Progman 子窗按 Z 序列出，解释点击命中谁。</summary>
@@ -1018,7 +1084,7 @@ namespace WinUI2Demo
         /// 嵌入桌面时宿主是 Progman 的子窗，SetWindowPos 的 x/y 是父客户区坐标，
         /// 所以写入后再用 GetWindowRect 复核，按差值校正一次（不假设父窗原点 = 屏幕原点）。
         /// </summary>
-        private static void ApplyLayout(string reason)
+        private static void ApplyLayout(string reason, bool show = true)
         {
             if (_layoutFixed || _host.IsNull)
             {
@@ -1038,8 +1104,9 @@ namespace WinUI2Demo
             var w = target.Right - target.Left;
             var h = target.Bottom - target.Top;
 
+            var showFlag = show ? SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW : (SET_WINDOW_POS_FLAGS)0;
             PInvoke.SetWindowPos(_host, InsertAfterTop, target.Left, target.Top, w, h,
-                SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW);
+                SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | showFlag);
 
             var actual = HostRect();
             var dx = target.Left - actual.Left;
@@ -1047,14 +1114,14 @@ namespace WinUI2Demo
             if (dx != 0 || dy != 0)
             {
                 PInvoke.SetWindowPos(_host, InsertAfterTop, target.Left + dx, target.Top + dy, w, h,
-                    SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW);
+                    SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | showFlag);
                 actual = HostRect();
             }
 
             var parent = PInvoke.GetAncestor(_host, GET_ANCESTOR_FLAGS.GA_PARENT);
-            Log($"[WS] layout({reason}) basis={(_fillDesktop ? "rcMonitor" : "rcWork")} target={Rect(target)} " +
-                $"actual={Rect(actual)} parent=0x{Hx(parent)} parentOffsetCorrection=({dx},{dy}) " +
-                $"lastErr={Marshal.GetLastWin32Error()}");
+            Log($"[WS] layout({reason}) basis={(_fillDesktop ? "rcMonitor" : "rcWork")} show={show} " +
+                $"target={Rect(target)} actual={Rect(actual)} parent=0x{Hx(parent)} " +
+                $"parentOffsetCorrection=({dx},{dy}) lastErr={Marshal.GetLastWin32Error()}");
 
             LogRects();
         }
@@ -1280,7 +1347,8 @@ namespace WinUI2Demo
             return candidate;
         }
 
-        private static void ReparentWindow(HWND hwnd, HWND parent, int x, int y, int w, int h, bool bottom)
+        private static void ReparentWindow(HWND hwnd, HWND parent, int x, int y, int w, int h,
+            bool bottom, bool show = true)
         {
             long style = (long)PInvoke.GetWindowLongPtr(hwnd, WINDOW_LONG_PTR_INDEX.GWL_STYLE);
             style = (style & ~(long)WS_POPUP) | WS_CHILD;
@@ -1298,7 +1366,7 @@ namespace WinUI2Demo
                 bottom ? InsertAfterBottom : InsertAfterTop,
                 x, y, w, h,
                 SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE |
-                SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW |
+                (show ? SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW : (SET_WINDOW_POS_FLAGS)0) |
                 SET_WINDOW_POS_FLAGS.SWP_FRAMECHANGED);
         }
 
@@ -1481,21 +1549,123 @@ namespace WinUI2Demo
                 $"managed={GC.GetTotalMemory(false) / 1048576.0:F2}MB emptyOk={ok} note=EmptyWorkingSet只降WS");
         }
 
-        private static void ShowWindows()
+        /// <summary>
+        /// 启动显示时序：
+        /// 1) 窗口以隐藏状态创建，内容和布局都在不可见状态下完成（DemoShell 已 PrepareEntrance：Opacity=0 + 下移 10）；
+        /// 2) 等一次 CompositionTarget.Rendering（隐藏态可能不触发，只作信息记录，最多 250 ms）；
+        /// 3) 显示宿主（内容仍为 Opacity=0，透明背景 → 即使这一帧上屏也只见桌面，不可能出现白底/空布局）；
+        /// 4) 再等一次 Rendering（此时窗口已可见、合成器一定会排帧），DwmFlush 等待 DWM 合成完成；
+        /// 5) 播放淡入 + 上移动画。
+        /// 判据可靠性：Rendering 回调发生在该帧提交之前，所以我把它当作“即将提交”的信号，
+        /// 再用 DwmFlush 作为“已合成”的确认；超时则记录并降级为直接播动画（内容从 Opacity=0 开始，仍不会闪白）。
+        /// </summary>
+        private static void RunStartupReveal()
         {
-            if (!_desktopMode)
+            StartupRevealInProgress = true;
+            var revealStartTicks = Stopwatch.GetTimestamp();
+            CompositionTarget.Rendering += OnStartupRendering;
+
+            var hiddenTick = WaitForFrameTick(StartupHiddenFrameWaitMs);
+            Log($"{StartupTag()} hiddenFrameTick={hiddenTick} ticks={_frameTicks} shellLoaded={ShellLoaded}");
+
+            // 显示宿主；内容在 PrepareEntrance 后仍是 Opacity=0，透明岛不会画出未布局的空白
+            ShowWindows();
+            Log($"{StartupTag()} host shown contentOpacity=0");
+
+            // 抬起 5% 幽灵帧：强制一次真正带内容的绘制，避免动画时钟启动后才发现首次绘制很贵。
+            // 只等 1 个 tick 不够：Rendering 回调只是“开始处理这帧”，100k 网格的首次光栅化会继续占用
+            // UI 线程（实测约 800ms）；等到第 2 个 tick 才算这帧真正走完，再启动动画。
+            _shell?.KickFirstPaint();
+            var shownTick = WaitForFrameTicks(2, StartupShownFrameWaitMs);
+            CompositionTarget.Rendering -= OnStartupRendering;
+
+            if (shownTick)
             {
-                PInvoke.SetWindowPos(
-                    _host, InsertAfterTop, HostX, HostY, HostW, HostH,
-                    SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW);
+                var flushHr = DwmFlush();
+                Log($"{StartupTag()} firstFrame committed ticks={_frameTicks} shellLoaded={ShellLoaded} " +
+                    $"dwmFlushHr=0x{flushHr:X8}");
+            }
+            else
+            {
+                Log($"[FALLBACK] first-frame-timeout waitedMs={StartupShownFrameWaitMs} " +
+                    $"ticks={_frameTicks} shellLoaded={ShellLoaded} => animate anyway");
             }
 
-            PInvoke.ShowWindow(_host, SHOW_WINDOW_CMD.SW_SHOW);
+            if (!ShellLoaded)
+                Log("[STARTUP] WARN shell Loaded 事件未在首帧前观测到（Loaded 可能延迟到下一次布局）");
+
+            var gateMs = (long)((Stopwatch.GetTimestamp() - revealStartTicks) * 1000.0 / Stopwatch.Frequency);
+            Log($"{StartupTag()} revealGateMs={gateMs} (hiddenWait+show+kickPaint+firstFrame+DwmFlush)");
+            _shell?.PlayEntrance();
+            StartupRevealInProgress = false;
+        }
+
+        internal static void OnEntranceComplete()
+        {
+            StartupRevealInProgress = false;
+        }
+
+        private static void OnStartupRendering(object? sender, object e)
+        {
+            _frameTicks++;
+            if (!_firstRenderingTickLogged)
+            {
+                _firstRenderingTickLogged = true;
+                Log($"{StartupTag()} Rendering tick#1 (window hidden/shown pending) shellLoaded={ShellLoaded}");
+            }
+        }
+
+        /// <summary>在当前线程泵消息，直到出现新的 Rendering tick 或超时。</summary>
+        private static bool WaitForFrameTick(int timeoutMs) => WaitForFrameTicks(1, timeoutMs);
+
+        /// <summary>等待至少 count 个新的 Rendering tick（用于确认上一次首帧绘制已走完）。</summary>
+        private static bool WaitForFrameTicks(int count, int timeoutMs)
+        {
+            var baseline = _frameTicks;
+            var sw = Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < timeoutMs)
+            {
+                Pump(2);
+                if (_frameTicks >= baseline + count)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static void ShowWindows()
+        {
+            // 布局已经在隐藏状态完成，这里只做显示，不再重置位置
+            PInvoke.ShowWindow(_host, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);
             if (!_xamlHwnd.IsNull)
-                PInvoke.ShowWindow(_xamlHwnd, SHOW_WINDOW_CMD.SW_SHOW);
+                PInvoke.ShowWindow(_xamlHwnd, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);
 
             Log($"[SHOW] hostVisible={(bool)PInvoke.IsWindowVisible(_host)} xamlVisible={(bool)PInvoke.IsWindowVisible(_xamlHwnd)}");
             LogRects();
+        }
+
+        /// <summary>嵌入失败兜底：恢复为置顶浮层（WS_POPUP + WS_EX_TOPMOST），按工作区定位，保持可用。</summary>
+        private static void FallbackToTopmost(string reason)
+        {
+            Log($"{StartupTag()} [FALLBACK] {reason} => topmost window");
+
+            long style = (long)PInvoke.GetWindowLongPtr(_host, WINDOW_LONG_PTR_INDEX.GWL_STYLE);
+            style = (style & ~(long)WS_CHILD) | WS_POPUP;
+            PInvoke.SetWindowLongPtr(_host, WINDOW_LONG_PTR_INDEX.GWL_STYLE, (nint)style);
+
+            long exStyle = (long)PInvoke.GetWindowLongPtr(_host, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
+            exStyle |= WS_EX_TOPMOST | WS_EX_TOOLWINDOW;
+            PInvoke.SetWindowLongPtr(_host, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE, (nint)exStyle);
+
+            var oldParent = PInvoke.SetParent(_host, HWND.Null);
+            _desktopMode = false;
+            _desktoppane = false;
+
+            PInvoke.SetWindowPos(
+                _host, InsertAfterTop, HostX, HostY, HostW, HostH,
+                SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE |
+                SET_WINDOW_POS_FLAGS.SWP_FRAMECHANGED);
+            Log($"[FALLBACK] topmost restored oldParent=0x{Hx(oldParent)} style=0x{style:X} exStyle=0x{exStyle:X}");
         }
 
         private static void LogRects()

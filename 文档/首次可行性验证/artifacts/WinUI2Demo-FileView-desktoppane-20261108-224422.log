@@ -1,0 +1,105 @@
+﻿[22:44:23.334] === WinUI2Demo v1.0 ===
+[22:44:23.357] [STARTUP] t=25ms pid=23744 os=Microsoft Windows NT 10.0.26300.0
+[22:44:23.358] RoInitialize(STA) => hr=0x00000001
+[22:44:23.417] [PKG] Package.Current fullName=WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4 family=WinUI2Demo_p06pf12qzbwg4
+[22:44:23.451] mode=desktoppane transparent=True selftest=False
+[22:44:23.543] WindowsXamlManager.InitializeForCurrentThread => True
+[22:44:23.547] Window.Current => Windows.UI.Xaml.Window
+[22:44:23.551] CoreWindow.GetForCurrentThread => Windows.UI.Core.CoreWindow
+[22:44:23.556] [CoreWindowInterop] hwnd=0x8D087A
+[22:44:23.638] [WINUI2] XamlControlsResources merged into Application.Resources
+[22:44:23.663] [WINUI2] resource NavigationViewContentBackground => SolidColorBrush color=#4C3A3A3A opacity=1
+[22:44:23.671] [WINUI2] resource NavigationViewDefaultBackground lookup failed: COMException
+[22:44:23.671] [WINUI2] resource ApplicationPageBackgroundThemeBrush => SolidColorBrush color=#FF202020 opacity=1
+[22:44:23.674] [RegisterClass] host atom=50010 lastErr=0
+[22:44:23.677] [CreateWindow] host hwnd=0x3007B4 exStyle=0x200080 lastErr=0
+[22:44:23.677] [STARTUP] t=346ms window created hidden hwnd=0x3007B4
+[22:44:23.694] [DWS] created=True
+[22:44:23.701] [DWS] AttachToWindow(host) => 0x00000000
+[22:44:23.701] [DWS] island hwnd=0x1A0E9C
+[22:44:23.826] [FV] page start path='C:\Users\gold\perf-research\data\f10k'
+[22:44:23.831] [MEMPRESSURE] level=OverLimit usageMB=41.6
+[22:44:23.848] [STARTUP] entrance prepared opacity=0 translateY=10 t=516ms
+[22:44:23.849] [DEMO] DemoShell created, content=WinUI2Demo.FileViewPage backStack=0 canGoBack=False t=518ms
+[22:44:23.855] [MEM] tag=idle items=0 ws=99.1MB private=25.4MB peakWs=99.1MB managed=1.29MB gcDelta=0/0/0 pauseDelta=0.0ms pauseTotal=0.0ms estModel=0.00MB estIcons=0.00MB bufferPeak=0
+[22:44:23.856] [DWS] Content set
+[22:44:23.857] [DWS] island sized to 1120x640
+[22:44:23.858] [STARTUP] t=526ms island content set hwnd=0x1A0E9C
+[22:44:23.859] [XST] set_IsBackgroundTransparent(True) => hr=0x00000000 readback=True
+[22:44:23.859] [STARTUP] t=527ms transparency applied ok=True requested=True
+[22:44:23.859] host dpi=144 coreHwnd=0x8D087A xamlHwnd=0x1A0E9C
+[22:44:23.859] [DESK] Progman=0x1015C
+[22:44:23.861] [DESK] Progman children in Z order: SHELLDLL_DefView(0x10160,visible=True,rect=0,0,1920,1080) -> WorkerW(0x4F0232,visible=True,rect=0,0,1920,1080) -> 
+[22:44:23.861] [HOTKEY] Ctrl+F2=True Ctrl+F3=True Ctrl+F4=True
+[22:44:23.863] [REPARENT] hwnd=0x3007B4 oldParent=0x1000C newParent=0x1015C style=0x44000000 exStyle=0x200080 lastErr=0
+[22:44:23.864] [DESKTOPPANE] parent=0x1015C defView=0x10160 hostIsChild=True
+[22:44:23.865] [HITTEST] (640,380) => DirectUIHWND 0x4A09CC ours=False root=0x161046
+[22:44:23.865] [HITTEST] (220,260) => SysTreeView32 0x160A94 ours=False root=0x161046
+[22:44:23.865] [HITTEST] (1060,260) => DirectUIHWND 0x4A09CC ours=False root=0x161046
+[22:44:23.865] [STARTUP] t=533ms desktop embed ok mode=desktoppane
+[22:44:23.865] [DESK] Progman=0x1015C
+[22:44:23.865] [DESK] Progman children in Z order: WinUI2DemoHost.2d29839cff2b44209b188ba7b61ea316(0x3007B4,visible=False,rect=80,60,1200,700) -> SHELLDLL_DefView(0x10160,visible=True,rect=0,0,1920,1080) -> WorkerW(0x4F0232,visible=True,rect=0,0,1920,1080) -> 
+[22:44:23.867] [WS] enum monitors ok=True count=1 SM_CMONITORS=1 MonitorFromWindow(0x3007B4,NEAREST)=10001
+[22:44:23.868] [WS] layout(startup) basis=rcWork show=False target=(0,0,1920,1008) actual=(0,0,1920,1008) parent=0x1015C parentOffsetCorrection=(0,0) lastErr=0
+[22:44:23.868] [RECT] host screen=(0,0,1920,1008)
+[22:44:23.868] [RECT] island screen=(0,0,1920,1008) root=0x1015C
+[22:44:23.873] [WS] enum monitors ok=True count=1 SM_CMONITORS=1 MonitorFromWindow(0x3007B4,NEAREST)=10001
+[22:44:23.873] [WS] monitor[1/1] hm=10001 device=\\.\DISPLAY1 primary=True dpi=144x144 rcMonitor=(0,0,1920,1080)px rcWork=(0,0,1920,1008)px | dipMonitor=(0,0,1280,720) dipWork=(0,0,1280,672)
+[22:44:23.874] [WS] SPI_GETWORKAREA ok=True rect=(0,0,1920,1008)px dip=(0,0,1280,672) equalCurrentRcWork=True equalPrimaryRcWork=True
+[22:44:23.875] [WS] taskbar ABM_GETTASKBARPOS ok=True edge=下(3) rect=(0,1008,1920,1080)px
+[22:44:23.875] [WS] insets(work vs monitor) px: left=0 top=0 right=0 bottom=72 dipBottom=48
+[22:44:23.875] [WS] verdict(startup) host=(0,0,1920,1008)px layout=铺满工作区(rcWork) bottomOverWork=0px(0dip) desktopMode=True
+[22:44:23.876] [WS] hit(workBottom-10) (960,998) => DirectUIHWND 0x7000EC ours=False root=0x161046
+[22:44:23.876] [WS] hit(workBottom+10) (960,1018) => CabinetWClass 0x161046 ours=False root=0x161046
+[22:44:23.877] [WS] text => 显示器: \\.\DISPLAY1（主屏）1920x1080px @144DPI → 1280x720DIP | rcMonitor=(0,0,1920,1080)px / 0,0,1280,720DIP rcWork=(0,0,1920,1008)px / 0,0,1280,672DIP | SPI_GETWORKAREA=(0,0,1920,1008)px ok=True 与当前屏rcWork一致=True 任务栏边=下 rect=(0,1008,1920,1080)px | 本次布局: 铺满工作区（host=(0,0,1920,1008)px）；嵌入态：宿主在桌面窗口树内，任务栏/普通应用都在其上方 → 可见范围≈工作区
+[22:44:23.877] [STARTUP] t=545ms layout done (host still hidden)
+[22:44:23.950] [FV] scrollviewer attached
+[22:44:23.950] [STARTUP] shell Loaded t=619ms
+[22:44:23.951] [STARTUP] page Loaded name=FileViewPage t=619ms
+[22:44:23.952] [STARTUP] t=620ms Rendering tick#1 (window hidden/shown pending) shellLoaded=True
+[22:44:23.970] [STARTUP] t=639ms hiddenFrameTick=True ticks=2 shellLoaded=True
+[22:44:23.972] [SHOW] hostVisible=True xamlVisible=True
+[22:44:23.972] [RECT] host screen=(0,0,1920,1008)
+[22:44:23.972] [RECT] island screen=(0,0,1920,1008) root=0x1015C
+[22:44:23.972] [STARTUP] t=641ms host shown contentOpacity=0
+[22:44:23.977] [FV] firstBatch count=60 atMs=143 uiDelayMs=125 applyMs=2 enumMs=9
+[22:44:23.981] [MEM] tag=firstBatch items=60 ws=113.1MB private=35.0MB peakWs=113.1MB managed=2.65MB gcDelta=1/0/0 pauseDelta=3.8ms pauseTotal=3.8ms estModel=0.01MB estIcons=0.00MB bufferPeak=60
+[22:44:23.981] [FV] batch n=1 count=60 shown=60 scanned=60 enumMs=9 uiDelayMs=125 applyMs=2
+[22:44:23.983] [FV] batch n=2 count=9940 shown=10000 scanned=10000 enumMs=63 uiDelayMs=79 applyMs=0
+[22:44:23.983] [FV] enum done count=10000 enumMs=63 error=none scanned=10000
+[22:44:23.983] [FV] feed done shown=10000 batches=2 firstPaintMs=143 feedDoneMs=150 uiApplyMaxMs=2 icons requested=0 loaded=0 failed=0
+[22:44:23.983] [FV] heartbeat feed maxGapMs=0 samples=0
+[22:44:23.987] [MEM] tag=feedDone items=10000 ws=113.2MB private=35.1MB peakWs=113.2MB managed=2.91MB gcDelta=1/0/0 pauseDelta=3.8ms pauseTotal=3.8ms estModel=1.47MB estIcons=0.00MB bufferPeak=9940
+[22:44:24.013] [FV] firstRealized name='file_000000.dat' atMs=179
+[22:44:24.217] [FV] layoutAfterBatch n=2 items=10000 ms=234
+[22:44:24.300] [STARTUP] t=969ms firstFrame committed ticks=4 shellLoaded=True dwmFlushHr=0x00000000
+[22:44:24.300] [STARTUP] t=969ms revealGateMs=422 (hiddenWait+show+firstFrame+DwmFlush)
+[22:44:24.319] [STARTUP] anim start t=987ms durationMs=240
+[22:44:24.319] [OCC] disabled by --occ 0
+[22:44:25.156] [STARTUP] anim complete t=1824ms opacity=1.00
+[22:44:26.038] [FV] icons settle requested=112 loaded=96 failed=0 evicted=0 cache=96 realized=112
+[22:44:26.042] [MEM] tag=iconsSettle items=10000 ws=150.1MB private=67.3MB peakWs=150.1MB managed=3.27MB gcDelta=2/1/1 pauseDelta=16.2ms pauseTotal=16.2ms estModel=1.47MB estIcons=0.38MB bufferPeak=9940
+[22:44:43.449] [INPUT] WM_MOUSEACTIVATE on host hwnd=0x3007B4 => MA_ACTIVATE
+[22:44:43.449] [INPUT] msg=0x0246 hwnd=0x2709A0 lParam=0x5B0134
+[22:44:43.485] [INPUT] msg=0x0247 hwnd=0x2709A0 lParam=0x5B0134
+[22:44:43.510] [XST] set_IsBackgroundTransparent(False) => hr=0x00000000 readback=False
+[22:44:43.511] [DEMO] transparency toggled => False
+[22:44:44.745] [INPUT] WM_MOUSEACTIVATE on host hwnd=0x3007B4 => MA_ACTIVATE
+[22:44:44.746] [INPUT] msg=0x0246 hwnd=0x2709A0 lParam=0x5B0134
+[22:44:44.793] [INPUT] msg=0x0247 hwnd=0x2709A0 lParam=0x5B0134
+[22:44:44.809] [XST] set_IsBackgroundTransparent(True) => hr=0x00000000 readback=True
+[22:44:44.809] [DEMO] transparency toggled => True
+[22:44:45.341] [FV] view(moving) first=-1 last=-1 realized=245 shown=10000 icons requested=245 loaded=119 failed=0 evicted=0 cache=119 visibleMissing=126
+[22:44:46.883] [FV] view(settle) first=4984 last=5018 realized=245 shown=10000 icons requested=245 loaded=245 failed=0 evicted=85 cache=160 visibleMissing=0
+[22:44:46.883] [FV] heartbeat scroll maxGapMs=931 samples=6
+[22:44:46.886] [MEM] tag=scrollSettle items=10000 ws=170.7MB private=81.7MB peakWs=171.8MB managed=5.87MB gcDelta=2/1/1 pauseDelta=16.2ms pauseTotal=16.2ms estModel=1.47MB estIcons=0.62MB bufferPeak=9940
+[22:44:48.192] [INPUT] WM_MOUSEACTIVATE on host hwnd=0x3007B4 => MA_ACTIVATE
+[22:44:48.192] [INPUT] msg=0x0246 hwnd=0x2709A0 lParam=0x91046A
+[22:44:48.242] [INPUT] msg=0x0247 hwnd=0x2709A0 lParam=0x91046A
+[22:44:55.000] [INPUT] WM_MOUSEACTIVATE on host hwnd=0x3007B4 => MA_ACTIVATE
+[22:44:55.000] [INPUT] msg=0x0246 hwnd=0x2709A0 lParam=0x3701FE
+[22:44:55.049] [INPUT] msg=0x0247 hwnd=0x2709A0 lParam=0x3701FE
+[22:44:55.080] [DEMO] close requested
+[22:44:55.080] [DEMO] interactive loop exited
+[22:44:55.140] [CLEANUP] DesktopWindowXamlSource disposed
+[22:44:55.149] [CLEANUP] windows destroyed

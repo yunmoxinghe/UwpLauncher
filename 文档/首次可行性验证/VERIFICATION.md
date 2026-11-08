@@ -821,3 +821,52 @@ msbuild ...\WinUI2Demo.csproj /restore /t:Publish /p:Platform=x64 /p:Configurati
 - 结构性结论：**当前架构（每项一个 class + INPC + ObservableCollection）下 100k 自持下限 ≈14.9 MB，10 MB 不可达**；继续下降需要改池索引或虚拟 item source，见 OPTIMIZATION.md 4.7。
 - 遮挡降级：全屏覆盖触发、700×500 部分遮挡不触发、二次触发、恢复 `restoreMs=380/770 ms`（≤1 s 判定划算）；tier4 `WS 165.1 → 1.3 MB` 而 `private 69.4 MB` 不变 —— **只降 WS，不算省内存**。
 - 回归：`scripts/test-fileview-uia.ps1 -OccludeTest`（100k）`failures=0`，进入/返回/透明/滚动/退出全 PASS；`-Sweep 25,50,75,100,0` 用于图标 LRU（cache 封顶 160、累计 evicted 76、各点 `visibleMissing=0`）。
+
+## 15. 正式版 v1.0（2026-11-08 深夜）
+
+详细数字与逐项归因见 [OPTIMIZATION.md](OPTIMIZATION.md) 第 6 节；启动时序单页见 [启动时序.md](启动时序.md)。
+
+### 15.1 形态变化（不再手动切模式）
+
+- 启动参数默认 `--mode desktoppane --transparent 1`；进程启动即嵌入 `Progman`（可点击），透明默认开，并直接导航到 `FileViewPage`。
+- 文件视图由 `ListView` 改为 `GridView` + `ItemsWrapGrid`：每项 36×36 图标 + 名称（最多 2 行）+ 类型/大小；枚举、批量喂入、两段式图标、LRU、模型瘦身保持。
+- 顶栏只保留“透明”和“退出”；实验用的模式/铺满/InfoBar 开关已移除（`Ctrl+F2/F3/F4` 宏键仍可用，`Ctrl+F3` 仅作为调试留存）。
+- 入场动画：隐藏创建 → 隐藏布局 → 显示（内容 `Opacity=0`）→ 5% 幽灵帧 → 等 2 个 Rendering tick → `DwmFlush` → Composition 淡入 0.05→1 / 上移 10→0（240 ms）。
+
+### 15.2 真实操作验收（UIA + 真实 `mouse_event`，Release 包）
+
+| # | 场景 | 结果 | 证据 |
+| --- | --- | --- | --- |
+| 1 | 启动自动进入桌面层 | PASS | `[REPARENT] newParent=Progman`、`[DESKTOPPANE] hostIsChild=True`；无 `[FALLBACK]` |
+| 2 | 启动自动进入文件视图 | PASS | `autoEntry=True`、`[NAV] Navigated to WinUI2Demo.FileViewPage` |
+| 3 | 透明默认开启 | PASS | `[XST] set_IsBackgroundTransparent(True) => hr=0x0 readback=True`；页内关/开各一次均生效 |
+| 4 | 动画在内容就绪后才开始 | PASS | `firstFrame committed t=805ms` → `anim start t=814ms` → `anim complete t=1096ms`（100k） |
+| 5 | 点击可用 | PASS | 透明开关、退出按钮的真实点击 `under=WinUI2DemoHost`；`foreground ok=False` 是 Progman 子窗的预期 |
+| 6 | 退出正常 | PASS | 点击退出后 `process exited=True` |
+| 7 | 网格虚拟化 | PASS | 100k：50% 处 `realized=409`；增量滚动 `realized=528`，均远小于 100000 |
+| 8 | 万级滚动/首屏 | PASS | 10k：`firstPaint=205 feedDone=212`、滚动停顿 313 ms；100k：`firstPaint=129 feedDone=1017`、滚动 180–311 ms、增量 165 ms |
+
+- 命令：`scripts/test-fileview-uia.ps1 -Mode desktoppane -Dir ...\f10k -Expect 10000`；100k 加 `-Wheel`；
+  内存跑 `-MemGc -NoOcc`。两次 `RESULT ... failures=0`。
+- 日志：`artifacts/WinUI2Demo-FileView-desktoppane-20261108-231223.log`（10k）、`...-231248.log`（100k）、`...-231356.log`（100k 内存）。
+
+### 15.3 首屏时间（实测）
+
+| 口径 | 10k | 100k |
+| --- | --- | --- |
+| 进程启动 → 窗口创建（隐藏） | 331 ms | 278–284 ms |
+| → 页面 Loaded | 744 ms | 516–533 ms |
+| → 显示宿主（`Opacity=0`） | 770 ms | 541–545 ms |
+| → 首帧提交（DwmFlush=0） | 864 ms | 805–827 ms |
+| → 动画完成（完全可见） | **1158 ms** | **1096–1118 ms** |
+
+- 冷启动会更慢（同晚记录 `anim complete 1863 ms`）；上表为热缓存复测，单次极值不作结论。
+- 动画期间首批 30 项已布局；100k 剩余批次在动画后继续喂入（`feedDone 994–1017 ms`），不阻塞交互。
+
+### 15.4 降级与未验证项
+
+- 透明失败 → 取消透明并切深色不透明背景（`SetOpaqueFallback`），日志 `[FALLBACK] transparency-unavailable`。
+- 嵌入失败 → `FallbackToTopmost` 恢复 `WS_POPUP + WS_EX_TOPMOST`、`SetParent(null)`、工作区定位，保持可交互。
+- 首帧超时（`StartupShownFrameWaitMs=1200`）→ 记录 `[FALLBACK] first-frame-timeout ... => animate anyway`，从 0.05 起播，不闪白。
+- **本轮未做故障注入**：三条降级路径只有代码路径和日志文案，没有人为制造失败环境；正常路径已全部实测通过。
+- 其他未完成项：GridView Private +14.2 MB（相对 ListView）、喂入期 UI 停顿 131–143 ms 未达 50 ms 预算、首屏图标先显示类型字形（缩略图去抖后补）。

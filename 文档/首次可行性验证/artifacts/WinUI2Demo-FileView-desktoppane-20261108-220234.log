@@ -1,0 +1,248 @@
+﻿[22:02:37.632] === WinUI2Demo ===
+[22:02:37.755] pid=7284 os=Microsoft Windows NT 10.0.26300.0
+[22:02:37.756] RoInitialize(STA) => hr=0x00000001
+[22:02:38.072] [PKG] Package.Current fullName=WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4 family=WinUI2Demo_p06pf12qzbwg4
+[22:02:38.304] mode=desktoppane transparent=True selftest=False
+[22:02:38.915] WindowsXamlManager.InitializeForCurrentThread => True
+[22:02:38.922] Window.Current => Windows.UI.Xaml.Window
+[22:02:38.928] CoreWindow.GetForCurrentThread => Windows.UI.Core.CoreWindow
+[22:02:38.981] [CoreWindowInterop] hwnd=0xF0FFE
+[22:02:39.308] [WINUI2] XamlControlsResources merged into Application.Resources
+[22:02:39.338] [WINUI2] resource NavigationViewContentBackground => SolidColorBrush color=#4C3A3A3A opacity=1
+[22:02:39.347] [WINUI2] resource NavigationViewDefaultBackground lookup failed: COMException
+[22:02:39.348] [WINUI2] resource ApplicationPageBackgroundThemeBrush => SolidColorBrush color=#FF202020 opacity=1
+[22:02:39.350] [RegisterClass] host atom=50006 lastErr=0
+[22:02:39.355] [CreateWindow] host hwnd=0x480916 exStyle=0x200080 lastErr=0
+[22:02:39.376] [DWS] created=True
+[22:02:39.384] [DWS] AttachToWindow(host) => 0x00000000
+[22:02:39.384] [DWS] island hwnd=0x150E7C
+[22:02:39.572] [PAGE-A] ctor instance=#1 cacheMode=Disabled
+[22:02:39.580] [PAGE-A] OnNavigatedTo #1 mode=New param='start' backStack=0 canGoBack=False
+[22:02:39.644] [DEMO] DemoShell created, content=WinUI2Demo.PageA backStack=0 canGoBack=False
+[22:02:39.737] [MEM] tag=idle items=0 ws=93.9MB private=23.8MB peakWs=93.9MB managed=0.44MB gcDelta=0/0/0 pauseDelta=0.0ms pauseTotal=0.0ms estModel=0.00MB estIcons=0.00MB bufferPeak=0
+[22:02:39.739] [DWS] Content set
+[22:02:39.808] [DWS] island sized to 1120x640
+[22:02:39.811] [XST] set_IsBackgroundTransparent(True) => hr=0x00000000 readback=True
+[22:02:39.811] host dpi=144 coreHwnd=0xF0FFE xamlHwnd=0x150E7C
+[22:02:39.812] [DESK] Progman=0x1015C
+[22:02:39.814] [DESK] Progman children in Z order: SHELLDLL_DefView(0x10160,visible=True,rect=0,0,1920,1080) -> WorkerW(0x3F0566,visible=True,rect=0,0,1920,1080) -> 
+[22:02:39.815] [HOTKEY] Ctrl+F2=True Ctrl+F3=True Ctrl+F4=True
+[22:02:39.818] [REPARENT] hwnd=0x480916 oldParent=0x1000C newParent=0x1015C style=0x44000000 exStyle=0x200080 lastErr=0
+[22:02:39.820] [DESKTOPPANE] parent=0x1015C defView=0x10160 hostIsChild=True
+[22:02:39.821] [HITTEST] (640,380) => Chrome_RenderWidgetHostHWND 0x702DC ours=False root=0x80326
+[22:02:39.821] [HITTEST] (220,260) => Chrome_RenderWidgetHostHWND 0x702DC ours=False root=0x80326
+[22:02:39.821] [HITTEST] (1060,260) => Chrome_RenderWidgetHostHWND 0x702DC ours=False root=0x80326
+[22:02:39.821] [DESK] Progman=0x1015C
+[22:02:39.822] [DESK] Progman children in Z order: WinUI2DemoHost.560cbccdaa18488d8c2b8a8f5012658a(0x480916,visible=True,rect=80,60,1200,700) -> SHELLDLL_DefView(0x10160,visible=True,rect=0,0,1920,1080) -> WorkerW(0x3F0566,visible=True,rect=0,0,1920,1080) -> 
+[22:02:39.822] [SHOW] hostVisible=True xamlVisible=True
+[22:02:39.822] [RECT] host screen=(80,60,1200,700)
+[22:02:39.822] [RECT] island screen=(80,60,1200,700) root=0x1015C
+[22:02:39.826] [WS] enum monitors ok=True count=1 SM_CMONITORS=1 MonitorFromWindow(0x480916,NEAREST)=10001
+[22:02:39.828] [WS] layout(startup) basis=rcWork target=(0,0,1920,1008) actual=(0,0,1920,1008) parent=0x1015C parentOffsetCorrection=(0,0) lastErr=0
+[22:02:39.828] [RECT] host screen=(0,0,1920,1008)
+[22:02:39.828] [RECT] island screen=(0,0,1920,1008) root=0x1015C
+[22:02:39.829] [WS] enum monitors ok=True count=1 SM_CMONITORS=1 MonitorFromWindow(0x480916,NEAREST)=10001
+[22:02:39.829] [WS] monitor[1/1] hm=10001 device=\\.\DISPLAY1 primary=True dpi=144x144 rcMonitor=(0,0,1920,1080)px rcWork=(0,0,1920,1008)px | dipMonitor=(0,0,1280,720) dipWork=(0,0,1280,672)
+[22:02:39.830] [WS] SPI_GETWORKAREA ok=True rect=(0,0,1920,1008)px dip=(0,0,1280,672) equalCurrentRcWork=True equalPrimaryRcWork=True
+[22:02:39.831] [WS] taskbar ABM_GETTASKBARPOS ok=True edge=下(3) rect=(0,1008,1920,1080)px
+[22:02:39.831] [WS] insets(work vs monitor) px: left=0 top=0 right=0 bottom=72 dipBottom=48
+[22:02:39.832] [WS] verdict(startup) host=(0,0,1920,1008)px layout=铺满工作区(rcWork) bottomOverWork=0px(0dip) desktopMode=True
+[22:02:39.832] [WS] hit(workBottom-10) (960,998) => Chrome_RenderWidgetHostHWND 0x702DC ours=False root=0x80326
+[22:02:39.832] [WS] hit(workBottom+10) (960,1018) => Shell_TrayWnd 0x1013A ours=False root=0x1013A
+[22:02:39.834] [WS] text => 显示器: \\.\DISPLAY1（主屏）1920x1080px @144DPI → 1280x720DIP | rcMonitor=(0,0,1920,1080)px / 0,0,1280,720DIP rcWork=(0,0,1920,1008)px / 0,0,1280,672DIP | SPI_GETWORKAREA=(0,0,1920,1008)px ok=True 与当前屏rcWork一致=True 任务栏边=下 rect=(0,1008,1920,1080)px | 本次布局: 铺满工作区（host=(0,0,1920,1008)px）；嵌入态：宿主在桌面窗口树内，任务栏/普通应用都在其上方 → 可见范围≈工作区
+[22:02:39.836] [OCC] watch started intervalMs=600 rule=anyWindowAboveCoverHost95%
+[22:02:40.444] [OCC] occluded=1 reason=foreground-covers[Chrome_WidgetWin_1] cover=100% fg=0x80326 fgClass=Chrome_WidgetWin_1
+[22:02:41.671] [OCC] occluded=0 reason=clear fg=0x80326 fgClass=Chrome_WidgetWin_1
+[22:02:42.845] [OCC] occluded=1 reason=foreground-covers[Progman] cover=100% fg=0x1015C fgClass=Progman
+[22:02:50.897] [INPUT] WM_MOUSEACTIVATE on host hwnd=0x480916 => MA_ACTIVATE
+[22:02:50.897] [INPUT] msg=0x0246 hwnd=0x120E72 lParam=0x27F0100
+[22:02:50.937] [INPUT] msg=0x0247 hwnd=0x120E72 lParam=0x27F0100
+[22:02:50.938] [DEMO] PageA -> Navigate(FileViewPage)
+[22:02:50.944] [NAV] Navigating to WinUI2Demo.FileViewPage mode=New backStack=0
+[22:02:51.074] [NAV] Navigated to WinUI2Demo.FileViewPage mode=New content=WinUI2Demo.FileViewPage backStack=1 canGoBack=True
+[22:02:51.075] [PAGE-A] OnNavigatedFrom mode=New
+[22:02:51.083] [FV] page start path='C:\Users\gold\perf-research\data\f100k'
+[22:02:51.092] [MEMPRESSURE] level=OverLimit usageMB=47.8
+[22:02:51.108] [OCC][FV] enter reason=initial items=0 cacheBefore=0 feedDone=False
+[22:02:51.112] [OCC][FV] iconCache cleared n=0 why=occ
+[22:02:51.114] [OCC][FV] tier1 icons released=0 cache=0->0 managedDeltaKB=-2 (位图原生/显存部分不计入托管差值)
+[22:02:51.114] [OCC][FV] tier2 pages: Frame NavigationCacheMode=Disabled，无缓存页可释放 → 0
+[22:02:51.114] [OCC][FV] tier3 batchLimit=1500 bufferPeak=0 (只在枚举尚未完成时生效；已完成则为 0)
+[22:02:51.149] [MEM] tag=occ.t4 wsBefore=112.2MB wsAfterGc=112.2MB wsAfterTrim=2.5MB private=27.0MB managed=0.54MB emptyOk=True note=EmptyWorkingSet只降WS
+[22:02:51.308] [FV] scrollviewer attached
+[22:02:51.817] [FV] firstBatch count=1 atMs=716 uiDelayMs=12 applyMs=5 enumMs=690
+[22:02:51.834] [MEM] tag=firstBatch items=1 ws=55.0MB private=28.4MB peakWs=112.6MB managed=0.86MB gcDelta=5/5/5 pauseDelta=7.2ms pauseTotal=14.0ms estModel=0.00MB estIcons=0.00MB bufferPeak=1
+[22:02:51.834] [FV] batch n=1 count=1 shown=1 scanned=1 enumMs=690 uiDelayMs=12 applyMs=5
+[22:02:51.892] [FV] firstRealized name='file_000000.dat' atMs=791
+[22:02:52.053] [FV] batch n=2 count=1500 shown=1501 scanned=1501 enumMs=729 uiDelayMs=209 applyMs=7
+[22:02:52.055] [FV] batch n=3 count=1500 shown=3001 scanned=3001 enumMs=737 uiDelayMs=209 applyMs=0
+[22:02:52.064] [FV] batch n=4 count=1500 shown=4501 scanned=4501 enumMs=745 uiDelayMs=202 applyMs=9
+[22:02:52.066] [FV] batch n=5 count=1500 shown=6001 scanned=6001 enumMs=755 uiDelayMs=201 applyMs=1
+[22:02:52.067] [FV] batch n=6 count=1500 shown=7501 scanned=7501 enumMs=760 uiDelayMs=197 applyMs=0
+[22:02:52.068] [FV] batch n=7 count=1500 shown=9001 scanned=9001 enumMs=767 uiDelayMs=191 applyMs=1
+[22:02:52.069] [FV] batch n=8 count=1500 shown=10501 scanned=10501 enumMs=809 uiDelayMs=151 applyMs=1
+[22:02:52.070] [FV] batch n=9 count=1500 shown=12001 scanned=12001 enumMs=821 uiDelayMs=140 applyMs=0
+[22:02:52.071] [FV] batch n=10 count=1500 shown=13501 scanned=13501 enumMs=824 uiDelayMs=138 applyMs=1
+[22:02:52.076] [FV] batch n=11 count=1500 shown=15001 scanned=15001 enumMs=829 uiDelayMs=134 applyMs=4
+[22:02:52.077] [FV] batch n=12 count=1500 shown=16501 scanned=16501 enumMs=833 uiDelayMs=134 applyMs=1
+[22:02:52.078] [FV] batch n=13 count=1500 shown=18001 scanned=18001 enumMs=837 uiDelayMs=132 applyMs=1
+[22:02:52.079] [FV] batch n=14 count=1500 shown=19501 scanned=19501 enumMs=840 uiDelayMs=129 applyMs=0
+[22:02:52.080] [FV] batch n=15 count=1500 shown=21001 scanned=21001 enumMs=847 uiDelayMs=124 applyMs=0
+[22:02:52.081] [FV] batch n=16 count=1500 shown=22501 scanned=22501 enumMs=852 uiDelayMs=120 applyMs=0
+[22:02:52.082] [FV] batch n=17 count=1500 shown=24001 scanned=24001 enumMs=859 uiDelayMs=114 applyMs=0
+[22:02:52.083] [FV] batch n=18 count=1500 shown=25501 scanned=25501 enumMs=863 uiDelayMs=110 applyMs=0
+[22:02:52.084] [FV] batch n=19 count=1500 shown=27001 scanned=27001 enumMs=868 uiDelayMs=107 applyMs=0
+[22:02:52.085] [FV] batch n=20 count=1500 shown=28501 scanned=28501 enumMs=885 uiDelayMs=90 applyMs=0
+[22:02:52.086] [FV] batch n=21 count=1500 shown=30001 scanned=30001 enumMs=890 uiDelayMs=87 applyMs=0
+[22:02:52.087] [FV] batch n=22 count=1500 shown=31501 scanned=31501 enumMs=895 uiDelayMs=83 applyMs=0
+[22:02:52.088] [FV] batch n=23 count=1500 shown=33001 scanned=33001 enumMs=901 uiDelayMs=78 applyMs=1
+[22:02:52.089] [FV] batch n=24 count=1500 shown=34501 scanned=34501 enumMs=904 uiDelayMs=76 applyMs=0
+[22:02:52.090] [FV] batch n=25 count=1500 shown=36001 scanned=36001 enumMs=911 uiDelayMs=70 applyMs=1
+[22:02:52.091] [FV] batch n=26 count=1500 shown=37501 scanned=37501 enumMs=916 uiDelayMs=65 applyMs=0
+[22:02:52.092] [FV] batch n=27 count=1500 shown=39001 scanned=39001 enumMs=920 uiDelayMs=62 applyMs=1
+[22:02:52.093] [FV] batch n=28 count=1500 shown=40501 scanned=40501 enumMs=929 uiDelayMs=55 applyMs=1
+[22:02:52.095] [FV] batch n=29 count=1500 shown=42001 scanned=42001 enumMs=936 uiDelayMs=50 applyMs=1
+[22:02:52.452] [FV] batch n=30 count=1500 shown=43501 scanned=43501 enumMs=943 uiDelayMs=398 applyMs=2
+[22:02:52.454] [FV] batch n=31 count=1500 shown=45001 scanned=45001 enumMs=958 uiDelayMs=386 applyMs=1
+[22:02:52.455] [FV] batch n=32 count=1500 shown=46501 scanned=46501 enumMs=964 uiDelayMs=382 applyMs=1
+[22:02:52.456] [FV] batch n=33 count=1500 shown=48001 scanned=48001 enumMs=969 uiDelayMs=378 applyMs=1
+[22:02:52.541] [FV] batch n=34 count=1500 shown=49501 scanned=49501 enumMs=974 uiDelayMs=458 applyMs=1
+[22:02:52.542] [FV] batch n=35 count=1500 shown=51001 scanned=51001 enumMs=980 uiDelayMs=453 applyMs=0
+[22:02:52.542] [FV] batch n=36 count=1500 shown=52501 scanned=52501 enumMs=985 uiDelayMs=448 applyMs=0
+[22:02:52.543] [FV] batch n=37 count=1500 shown=54001 scanned=54001 enumMs=992 uiDelayMs=442 applyMs=0
+[22:02:52.544] [FV] batch n=38 count=1500 shown=55501 scanned=55501 enumMs=997 uiDelayMs=437 applyMs=0
+[22:02:52.544] [FV] batch n=39 count=1500 shown=57001 scanned=57001 enumMs=1003 uiDelayMs=432 applyMs=0
+[22:02:52.545] [FV] batch n=40 count=1500 shown=58501 scanned=58501 enumMs=1009 uiDelayMs=427 applyMs=0
+[22:02:52.545] [FV] batch n=41 count=1500 shown=60001 scanned=60001 enumMs=1015 uiDelayMs=421 applyMs=0
+[22:02:52.546] [FV] batch n=42 count=1500 shown=61501 scanned=61501 enumMs=1030 uiDelayMs=407 applyMs=0
+[22:02:52.547] [FV] batch n=43 count=1500 shown=63001 scanned=63001 enumMs=1036 uiDelayMs=402 applyMs=0
+[22:02:52.548] [FV] batch n=44 count=1500 shown=64501 scanned=64501 enumMs=1042 uiDelayMs=397 applyMs=1
+[22:02:52.549] [FV] batch n=45 count=1500 shown=66001 scanned=66001 enumMs=1048 uiDelayMs=391 applyMs=1
+[22:02:52.550] [FV] batch n=46 count=1500 shown=67501 scanned=67501 enumMs=1055 uiDelayMs=386 applyMs=0
+[22:02:52.551] [FV] batch n=47 count=1500 shown=69001 scanned=69001 enumMs=1061 uiDelayMs=381 applyMs=0
+[22:02:52.552] [FV] batch n=48 count=1500 shown=70501 scanned=70501 enumMs=1068 uiDelayMs=375 applyMs=0
+[22:02:52.552] [FV] batch n=49 count=1500 shown=72001 scanned=72001 enumMs=1074 uiDelayMs=369 applyMs=0
+[22:02:52.553] [FV] batch n=50 count=1500 shown=73501 scanned=73501 enumMs=1078 uiDelayMs=365 applyMs=0
+[22:02:52.554] [FV] batch n=51 count=1500 shown=75001 scanned=75001 enumMs=1084 uiDelayMs=361 applyMs=0
+[22:02:52.554] [FV] batch n=52 count=1500 shown=76501 scanned=76501 enumMs=1117 uiDelayMs=328 applyMs=0
+[22:02:52.555] [FV] batch n=53 count=1500 shown=78001 scanned=78001 enumMs=1123 uiDelayMs=323 applyMs=0
+[22:02:52.555] [FV] batch n=54 count=1500 shown=79501 scanned=79501 enumMs=1128 uiDelayMs=318 applyMs=0
+[22:02:52.556] [FV] batch n=55 count=1500 shown=81001 scanned=81001 enumMs=1136 uiDelayMs=311 applyMs=0
+[22:02:52.557] [FV] batch n=56 count=1500 shown=82501 scanned=82501 enumMs=1142 uiDelayMs=305 applyMs=0
+[22:02:52.557] [FV] batch n=57 count=1500 shown=84001 scanned=84001 enumMs=1148 uiDelayMs=300 applyMs=0
+[22:02:52.558] [FV] batch n=58 count=1500 shown=85501 scanned=85501 enumMs=1155 uiDelayMs=294 applyMs=0
+[22:02:52.559] [FV] batch n=59 count=1500 shown=87001 scanned=87001 enumMs=1162 uiDelayMs=288 applyMs=0
+[22:02:52.559] [FV] batch n=60 count=1500 shown=88501 scanned=88501 enumMs=1170 uiDelayMs=280 applyMs=0
+[22:02:52.560] [FV] batch n=61 count=1500 shown=90001 scanned=90001 enumMs=1178 uiDelayMs=273 applyMs=0
+[22:02:52.561] [FV] batch n=62 count=1500 shown=91501 scanned=91501 enumMs=1188 uiDelayMs=263 applyMs=0
+[22:02:52.561] [FV] batch n=63 count=1500 shown=93001 scanned=93001 enumMs=1210 uiDelayMs=242 applyMs=0
+[22:02:52.562] [FV] batch n=64 count=1500 shown=94501 scanned=94501 enumMs=1219 uiDelayMs=234 applyMs=0
+[22:02:52.563] [FV] batch n=65 count=1500 shown=96001 scanned=96001 enumMs=1228 uiDelayMs=225 applyMs=0
+[22:02:52.564] [FV] batch n=66 count=1500 shown=97501 scanned=97501 enumMs=1239 uiDelayMs=215 applyMs=0
+[22:02:52.564] [FV] batch n=67 count=1500 shown=99001 scanned=99001 enumMs=1250 uiDelayMs=206 applyMs=0
+[22:02:52.565] [FV] batch n=68 count=999 shown=100000 scanned=100000 enumMs=1260 uiDelayMs=196 applyMs=0
+[22:02:52.566] [FV] enum done count=100000 enumMs=1261 error=none scanned=100000
+[22:02:52.566] [FV] feed done shown=100000 batches=68 firstPaintMs=716 feedDoneMs=1465 uiApplyMaxMs=9 icons requested=12 loaded=0 failed=0
+[22:02:52.566] [FV] heartbeat feed maxGapMs=345 samples=9
+[22:02:52.609] [MODEL] tag=feedDone items=100000 obj+slot=9.92MB strHead=9.54MB content=8.39MB total=27.85MB chars name=1500000 dir=38(shared) size=600000 date=1600000 type=600000 glyph=100000 distinct size=1 date=4 type=1 glyph=1 dedupTotal=14.69MB
+[22:02:52.682] [MEM] tag=feedDone items=100000 ws=113.5MB private=64.8MB peakWs=114.5MB managed=15.37MB gcDelta=13/9/9 pauseDelta=94.9ms pauseTotal=101.7ms estModel=14.69MB estIcons=0.00MB bufferPeak=1500
+[22:02:53.989] [INPUT] WM_MOUSEACTIVATE on host hwnd=0x480916 => MA_ACTIVATE
+[22:02:53.989] [INPUT] msg=0x0246 hwnd=0x120E72 lParam=0x5B01AF
+[22:02:54.038] [INPUT] msg=0x0247 hwnd=0x120E72 lParam=0x5B01AF
+[22:02:54.052] [XST] set_IsBackgroundTransparent(False) => hr=0x00000000 readback=False
+[22:02:54.052] [DEMO] transparency toggled => False
+[22:02:54.687] [FV] icons settle requested=39 loaded=39 failed=0 evicted=0 cache=39 realized=124
+[22:02:54.743] [MEM] tag=iconsSettle items=100000 ws=122.2MB private=71.6MB peakWs=122.2MB managed=15.54MB gcDelta=16/12/12 pauseDelta=181.1ms pauseTotal=187.9ms estModel=14.69MB estIcons=0.15MB bufferPeak=1500
+[22:02:55.304] [INPUT] WM_MOUSEACTIVATE on host hwnd=0x480916 => MA_ACTIVATE
+[22:02:55.304] [INPUT] msg=0x0246 hwnd=0x120E72 lParam=0x5B01AF
+[22:02:55.368] [INPUT] msg=0x0247 hwnd=0x120E72 lParam=0x5B01AF
+[22:02:55.397] [XST] set_IsBackgroundTransparent(True) => hr=0x00000000 readback=True
+[22:02:55.397] [DEMO] transparency toggled => True
+[22:02:56.641] [OCC] occluded=0 reason=clear fg=0x3309CC fgClass=CASCADIA_HOSTING_WINDOW_CLASS
+[22:02:56.657] [OCC][FV] exit hiddenMs=5549 reloadQueued=0 cache=39
+[22:02:56.789] [OCC][FV] restore pending=0 restoreMs=132 verdict=OK(<1s)
+[22:02:56.806] [FV] view(restore) first=0 last=7 realized=124 shown=100000 icons requested=39 loaded=39 failed=0 evicted=0 cache=39 visibleMissing=0
+[22:02:57.849] [OCC] occluded=1 reason=foreground-covers[WindowsForms10.Window.8.app.0.10f6d4_r13_ad1] cover=100% fg=0x9609D4 fgClass=WindowsForms10.Window.8.app.0.10f6d4_r13_ad1
+[22:02:57.853] [OCC][FV] enter reason=foreground-covers[WindowsForms10.Window.8.app.0.10f6d4_r13_ad1] cover=100% items=100000 cacheBefore=39 feedDone=True
+[22:02:57.903] [OCC][FV] iconCache cleared n=39 why=occ
+[22:02:57.963] [OCC][FV] tier1 icons released=39 cache=39->0 managedDeltaKB=-15 (位图原生/显存部分不计入托管差值)
+[22:02:57.963] [OCC][FV] tier2 pages: Frame NavigationCacheMode=Disabled，无缓存页可释放 → 0
+[22:02:57.963] [OCC][FV] tier3 batchLimit=1500 bufferPeak=1500 (只在枚举尚未完成时生效；已完成则为 0)
+[22:02:58.065] [MEM] tag=occ.t4 wsBefore=122.7MB wsAfterGc=122.7MB wsAfterTrim=7.2MB private=71.1MB managed=15.50MB emptyOk=True note=EmptyWorkingSet只降WS
+[22:02:59.635] [OCC] occluded=0 reason=clear fg=0x9609D4 fgClass=WindowsForms10.Window.8.app.0.10f6d4_r13_ad1
+[22:02:59.743] [OCC][FV] exit hiddenMs=1797 reloadQueued=39 cache=0
+[22:03:00.235] [OCC] occluded=1 reason=foreground-covers[WindowsForms10.Window.8.app.0.10f6d4_r13_ad1] cover=100% fg=0x9609D4 fgClass=WindowsForms10.Window.8.app.0.10f6d4_r13_ad1
+[22:03:00.236] [OCC][FV] enter reason=foreground-covers[WindowsForms10.Window.8.app.0.10f6d4_r13_ad1] cover=100% items=100000 cacheBefore=39 feedDone=True
+[22:03:00.334] [OCC][FV] iconCache cleared n=39 why=occ
+[22:03:00.388] [OCC][FV] tier1 icons released=39 cache=39->0 managedDeltaKB=-74 (位图原生/显存部分不计入托管差值)
+[22:03:00.388] [OCC][FV] tier2 pages: Frame NavigationCacheMode=Disabled，无缓存页可释放 → 0
+[22:03:00.388] [OCC][FV] tier3 batchLimit=1500 bufferPeak=1500 (只在枚举尚未完成时生效；已完成则为 0)
+[22:03:00.474] [MEM] tag=occ.t4 wsBefore=78.1MB wsAfterGc=77.6MB wsAfterTrim=7.4MB private=70.0MB managed=15.50MB emptyOk=True note=EmptyWorkingSet只降WS
+[22:03:00.838] [OCC] occluded=0 reason=clear fg=0x1013A fgClass=Shell_TrayWnd
+[22:03:01.013] [OCC][FV] exit hiddenMs=648 reloadQueued=39 cache=0
+[22:03:01.447] [OCC] occluded=1 reason=foreground-covers[Progman] cover=100% fg=0x1015C fgClass=Progman
+[22:03:01.523] [FV] view(moving) first=-1 last=-1 realized=164 shown=100000 icons requested=157 loaded=78 failed=0 evicted=0 cache=0 visibleMissing=41
+[22:03:02.028] [OCC][FV] enter reason=foreground-covers[Progman] cover=100% items=100000 cacheBefore=0 feedDone=True
+[22:03:02.108] [OCC][FV] iconCache cleared n=0 why=occ
+[22:03:02.130] [OCC][FV] tier1 icons released=0 cache=0->0 managedDeltaKB=-40 (位图原生/显存部分不计入托管差值)
+[22:03:02.130] [OCC][FV] tier2 pages: Frame NavigationCacheMode=Disabled，无缓存页可释放 → 0
+[22:03:02.130] [OCC][FV] tier3 batchLimit=1500 bufferPeak=1500 (只在枚举尚未完成时生效；已完成则为 0)
+[22:03:02.182] [MEM] tag=occ.t4 wsBefore=85.0MB wsAfterGc=85.0MB wsAfterTrim=1.1MB private=68.9MB managed=15.59MB emptyOk=True note=EmptyWorkingSet只降WS
+[22:03:02.391] [OCC][FV] restore pending=0 restoreMs=1378 verdict=SLOW/INCOMPLETE
+[22:03:02.391] [FV] view(restore) first=49996 last=50003 realized=164 shown=100000 icons requested=157 loaded=157 failed=0 evicted=0 cache=79 visibleMissing=0
+[22:03:03.043] [FV] view(settle) first=49996 last=50003 realized=164 shown=100000 icons requested=157 loaded=157 failed=0 evicted=0 cache=79 visibleMissing=0
+[22:03:03.043] [FV] heartbeat scroll maxGapMs=693 samples=10
+[22:03:03.138] [MEM] tag=scrollSettle items=100000 ws=62.2MB private=65.4MB peakWs=122.7MB managed=15.53MB gcDelta=31/27/27 pauseDelta=626.4ms pauseTotal=633.2ms estModel=14.69MB estIcons=0.31MB bufferPeak=1500
+[22:03:03.841] [OCC] occluded=0 reason=clear fg=0x1013A fgClass=Shell_TrayWnd
+[22:03:03.841] [OCC][FV] exit hiddenMs=1813 reloadQueued=0 cache=79
+[22:03:03.967] [OCC][FV] restore pending=0 restoreMs=125 verdict=OK(<1s)
+[22:03:03.967] [FV] view(restore) first=49996 last=50003 realized=164 shown=100000 icons requested=157 loaded=157 failed=0 evicted=0 cache=79 visibleMissing=0
+[22:03:05.847] [INPUT] WM_MOUSEACTIVATE on host hwnd=0x480916 => MA_ACTIVATE
+[22:03:05.852] [INPUT] msg=0x0246 hwnd=0x120E72 lParam=0x91049A
+[22:03:05.894] [INPUT] msg=0x0247 hwnd=0x120E72 lParam=0x91049A
+[22:03:05.895] [FV] back => GoBack()
+[22:03:05.897] [NAV] Navigating to WinUI2Demo.PageA mode=Back backStack=1
+[22:03:05.900] [PAGE-A] ctor instance=#2 cacheMode=Disabled
+[22:03:05.905] [NAV] Navigated to WinUI2Demo.PageA mode=Back content=WinUI2Demo.PageA backStack=0 canGoBack=False
+[22:03:05.905] [FV] navigated from mode=Back
+[22:03:05.907] [PAGE-A] OnNavigatedTo #2 mode=Back param='start' backStack=0 canGoBack=False
+[22:03:06.239] [OCC] occluded=1 reason=foreground-covers[Progman] cover=100% fg=0x1015C fgClass=Progman
+[22:03:07.439] [OCC] occluded=0 reason=clear fg=0x1013A fgClass=Shell_TrayWnd
+[22:03:07.850] [INPUT] WM_MOUSEACTIVATE on host hwnd=0x480916 => MA_ACTIVATE
+[22:03:07.854] [INPUT] msg=0x0246 hwnd=0x120E72 lParam=0x27F0100
+[22:03:07.879] [INPUT] msg=0x0247 hwnd=0x120E72 lParam=0x27F0100
+[22:03:07.880] [DEMO] PageA -> Navigate(FileViewPage)
+[22:03:07.880] [NAV] Navigating to WinUI2Demo.FileViewPage mode=New backStack=0
+[22:03:07.887] [NAV] Navigated to WinUI2Demo.FileViewPage mode=New content=WinUI2Demo.FileViewPage backStack=1 canGoBack=True
+[22:03:07.887] [PAGE-A] OnNavigatedFrom mode=New
+[22:03:07.888] [FV] page start path='C:\Users\gold\perf-research\data\f100k'
+[22:03:07.888] [MEMPRESSURE] level=OverLimit usageMB=90.1
+[22:03:07.910] [FV] scrollviewer attached
+[22:03:07.958] [FV] firstBatch count=30 atMs=70 uiDelayMs=33 applyMs=0 enumMs=36
+[22:03:07.999] [MEM] tag=firstBatch items=30 ws=81.8MB private=64.8MB peakWs=122.7MB managed=5.07MB gcDelta=1/0/0 pauseDelta=7.0ms pauseTotal=708.0ms estModel=0.00MB estIcons=0.00MB bufferPeak=30
+[22:03:07.999] [FV] batch n=1 count=30 shown=30 scanned=30 enumMs=36 uiDelayMs=33 applyMs=0
+[22:03:08.001] [FV] batch n=2 count=20000 shown=20030 scanned=20030 enumMs=68 uiDelayMs=43 applyMs=1
+[22:03:08.007] [FV] firstRealized name='file_000000.dat' atMs=119
+[22:03:08.036] [OCC] occluded=1 reason=foreground-covers[Progman] cover=100% fg=0x1015C fgClass=Progman
+[22:03:08.214] [FV] batch n=3 count=20000 shown=40030 scanned=40030 enumMs=139 uiDelayMs=184 applyMs=1
+[22:03:08.214] [OCC][FV] enter reason=foreground-covers[Progman] cover=100% items=40030 cacheBefore=0 feedDone=False
+[22:03:08.256] [OCC][FV] iconCache cleared n=0 why=occ
+[22:03:08.275] [OCC][FV] tier1 icons released=0 cache=0->0 managedDeltaKB=0 (位图原生/显存部分不计入托管差值)
+[22:03:08.275] [OCC][FV] tier2 pages: Frame NavigationCacheMode=Disabled，无缓存页可释放 → 0
+[22:03:08.275] [OCC][FV] tier3 batchLimit=1500 bufferPeak=20000 (只在枚举尚未完成时生效；已完成则为 0)
+[22:03:08.327] [MEM] tag=occ.t4 wsBefore=98.9MB wsAfterGc=99.0MB wsAfterTrim=7.6MB private=73.2MB managed=15.65MB emptyOk=True note=EmptyWorkingSet只降WS
+[22:03:08.334] [FV] batch n=4 count=20000 shown=60030 scanned=60030 enumMs=173 uiDelayMs=265 applyMs=6
+[22:03:08.338] [FV] batch n=5 count=20000 shown=80030 scanned=80030 enumMs=224 uiDelayMs=221 applyMs=3
+[22:03:08.340] [FV] batch n=6 count=19970 shown=100000 scanned=100000 enumMs=268 uiDelayMs=180 applyMs=2
+[22:03:08.340] [FV] enum done count=100000 enumMs=268 error=none scanned=100000
+[22:03:08.340] [FV] feed done shown=100000 batches=6 firstPaintMs=70 feedDoneMs=452 uiApplyMaxMs=6 icons requested=8 loaded=0 failed=0
+[22:03:08.340] [FV] heartbeat feed maxGapMs=287 samples=1
+[22:03:08.349] [MODEL] tag=feedDone items=100000 obj+slot=9.92MB strHead=9.54MB content=8.39MB total=27.85MB chars name=1500000 dir=38(shared) size=600000 date=1600000 type=600000 glyph=100000 distinct size=1 date=4 type=1 glyph=1 dedupTotal=14.69MB
+[22:03:08.400] [MEM] tag=feedDone items=100000 ws=42.5MB private=70.4MB peakWs=122.7MB managed=15.39MB gcDelta=13/9/8 pauseDelta=170.6ms pauseTotal=871.6ms estModel=14.69MB estIcons=0.00MB bufferPeak=20000
+[22:03:09.081] [INPUT] WM_MOUSEACTIVATE on host hwnd=0x480916 => MA_ACTIVATE
+[22:03:09.081] [INPUT] msg=0x0246 hwnd=0x120E72 lParam=0x370472
+[22:03:09.134] [INPUT] msg=0x0247 hwnd=0x120E72 lParam=0x370472
+[22:03:09.179] [DEMO] close requested
+[22:03:09.179] [DEMO] interactive loop exited
+[22:03:09.205] [CLEANUP] DesktopWindowXamlSource disposed
+[22:03:09.213] [CLEANUP] windows destroyed

@@ -1,0 +1,36 @@
+﻿mode=desktoppane dir=C:\Users\gold\perf-research\data\f100k expect=100000 log=C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\artifacts\WinUI2Demo-FileView-desktoppane-20261108-220234.log
+pid=7284 aumid=WinUI2Demo_p06pf12qzbwg4!App
+hostHwnd=0x480916
+uia scope: name='WinUI2DemoHost' class='WinUI2DemoHost.560cbccdaa18488d8c2b8a8f5012658a'
+foreground ok=False
+found: fileView=True transparency=True quit=True
+PASS enter: 真实点击进入 FileViewPage
+PASS feed: 枚举/喂入完成
+firstBatch count=1 atMs=716 uiDelayMs=12 applyMs=5 enumMs=690
+firstRealized name=file_000000.dat atMs=791
+enum done count=100000 enumMs=1261 error=none
+feed done shown=100000 batches=68 firstPaintMs=716 feedDoneMs=1465 uiApplyMaxMs=9 iconsReq=12 iconsLoadedAtDone=0 iconsFailedAtDone=0
+heartbeat feed maxGapMs=345 samples=9
+PASS heartbeat: 喂入期间 UI 最大停顿 345ms
+PASS transparency: 文件页内透明关/开均生效
+PASS occlude: 全屏覆盖窗口 → [OCC] occluded=1
+occlude reason=foreground-covers[WindowsForms10.Window.8.app.0.10f6d4_r13_ad1]
+tier1 icons released=39 managedDeltaKB=-15
+tier3 batchLimit=1500 bufferPeak=1500
+tier4 ws 122.7->122.7->7.2MB private=71.1MB
+PASS occlude-boundary: 700x500 部分遮挡 → occluded=0
+PASS occlude-again: 二次全屏再次触发
+restore pending=0 restoreMs=132 verdict=OK(<1s)
+PASS restore: 恢复到可用 ≤1s
+list found: name='文件列表' class='ListView'
+scroll: SetScrollPercent(horizontal=-1, vertical=50) ok
+scroll: settle log received=True
+view settle first=49996 last=50003 realized=164 shown=100000
+PASS scroll: 已滚动到中段（first=49996）
+PASS virtualization: 容器 realized=164（远小于列表项数）
+heartbeat scroll maxGapMs=693 samples=10
+PASS back: 返回 PageA 成功
+PASS reenter: 第二次进入文件页并完成枚举
+PASS quit: 点击退出成功
+process exited=True
+RESULT mode=desktoppane failures=0

@@ -291,3 +291,106 @@
 - `--occ 0` 关闭遮挡检测（避免 IDE/终端盖住桌面时把枚举批次降到 1500 干扰性能口径）；内存/耗时对比全部用 `--occ 0` 重跑。
 - 功能回归（`-OccludeTest` 完整脚本）：进入/返回、透明开关、100k 枚举、滚动到 50%（realized 95）、宏键退出全部 PASS，`RESULT failures=0`。
 
+## 6. 正式版 v1.0：GridView 化与启动时序（2026-11-08 深夜）
+
+本节记录把实验 demo 收敛为产品形态的改动与复测。**代码/口径基线**：Release x64，`desktoppane`，透明默认开，
+`--occ` 默认开（性能表里的内存跑用 `--occ 0 -MemGc` 隔离遮挡/GC 干扰）。日志：`artifacts/WinUI2Demo-FileView-desktoppane-20261108-231223.log`（10k）、
+`...-231248.log`（100k + 增量滚动）、`...-231356.log`（100k 内存）。
+
+### 6.1 变更清单
+
+| 项 | 旧（实验 demo） | 新（v1.0） |
+| --- | --- | --- |
+| 文件容器 | `ListView` + `ItemsStackPanel`（单列） | `GridView` + `ItemsWrapGrid`（二维网格，`ItemWidth=176 ItemHeight=104`） |
+| 启动模式 | 默认 `topmost`，需手动点“嵌入桌面” | 默认 `desktoppane`（`Progman` 子窗、Z 序在 `SHELLDLL_DefView` 之上），无手动开关 |
+| 透明 | 默认关，需手动开 | 默认开；`IXamlSourceTransparency` set 后 readback 校验 |
+| 首次页面 | PageA，需手动点“文件视图” | 启动即 `Frame.Navigate(FileViewPage)` |
+| 入场 | 无 | 隐藏创建/布局 → 首帧 → `Composition` 淡入 0.05→1 + 位移 10→0（240 ms） |
+| 顶栏 | 嵌入/铺满/透明/InfoBar | 只保留“透明”和“退出” |
+| 图标请求 | 每个 `ContainerContentChanging` 直接请求 | 滚动/布局停止 120–150 ms 后只请求最终可视区（±2 行） |
+
+枚举、时间片增量喂入、两段式图标、`MaxCachedIcons=160` LRU、条目模型瘦身（父目录共享 / 显示文本池 / 删未用字段）全部保留，未回退。
+
+### 6.2 启动时序（实测，Release）
+
+判据写在代码注释里：`CompositionTarget.Rendering` 回调发生在“该帧提交之前”，因此当作**即将提交**；
+`DwmFlush()` 返回 0 当作**DWM 已合成**。单靠 Rendering 不足以证明“首帧已上屏”，所以：
+
+1. 窗口 `WS_EX_NOREDIRECTIONBITMAP` + 隐藏创建；内容和布局都在隐藏态完成（`show:false`）；
+2. 页面 `PrepareEntrance`：`Opacity=0`、`TranslateY=10`；等 1 个隐藏态 Rendering tick（最多 250 ms，只作信息记录）；
+3. `ShowWindow(SW_SHOWNOACTIVATE)` 显示宿主，此时内容仍 `Opacity=0`（透明岛 ⇒ 这一帧即使上屏也只见桌面，不可能闪白）；
+4. `KickFirstPaint()` 把内容抬到 `Opacity=0.05`，强制一次真正带内容的绘制；等 **2 个新的 Rendering tick**
+   （1 个只代表“开始处理这帧”，100k 网格首次光栅化会继续占用 UI 线程）最多 1200 ms；
+5. 成功则 `DwmFlush()` 确认合成；超时记录 `[FALLBACK] first-frame-timeout` 并照常播动画（从 0.05 起，仍不闪白）；
+6. `PlayEntrance()`：Composition 动画（不是 Storyboard，避免 UI 忙时被拖慢），240 ms 淡入 + 上移；
+   完成回调走后台 `System.Threading.Timer`（`DispatcherTimer` 在 UI 忙时曾把 270 ms 拖成 720 ms）。
+
+| 时间点 | 100k（231248） | 100k（231356） | 10k（231223） |
+| --- | --- | --- | --- |
+| 进程启动 `t=0` | 18 ms 打点 | 18 ms | 22 ms |
+| 窗口创建（隐藏） | 284 ms | 278 ms | 331 ms |
+| 页面 `Loaded` | 516 ms | 533 ms | 744 ms |
+| 隐藏态 Rendering tick | 517 ms | 534 ms | 746 ms |
+| 显示宿主（contentOpacity=0） | 541 ms | 545 ms | 770 ms |
+| 首帧提交 + DwmFlush | 805 ms（`hr=0`） | 827 ms（`hr=0`） | 864 ms（`hr=0`） |
+| 动画开始 | 814 ms | 835 ms | 878 ms |
+| 动画完成（内容全不透明） | **1096 ms** | **1118 ms** | **1158 ms** |
+| `revealGateMs`（隐藏等待→显示→kick→首帧→Flush） | 346 ms | 350 ms | 218 ms |
+
+- 顺序满足要求：窗口创建 → 页面 Loaded → 首帧提交 → 动画开始；日志里 `anim start` 永远晚于 `firstFrame committed`。
+- 首帧内容不是空白：100k 在首帧前已应用第 1 批 30 项（`[FV] firstBatch atMs=129`），动画淡入的是**已布局的网格**。
+- 冷/热差异：同一晚早些的冷启动曾出现 `window 718 ms / anim complete 1863 ms`；上表为热缓存、连续复测。单次极值不作结论。
+
+### 6.3 网格性能复测（Release，换控件不能退化）
+
+| 指标 | ListView 终态（第 4 节） | GridView v1.0（10k） | GridView v1.0（100k） | 判定 |
+| --- | --- | --- | --- | --- |
+| firstPaint | 66–209 | 205 | 122–129 | 未退化 |
+| feedDone | 760–800 | 212 | 994–1017 | 100k 略高（启动闸门与网格布局共存），仍在基线区间 |
+| enumMs | 328–499（热） | 115 | 253–269 | 未退化 |
+| 喂入期 UI 最大停顿 | 460–548 | 闸门内无样本 | 131–143 | 仍在既有短板区间 |
+| 滚动到 50% / 100% 最大停顿 | 263–499 | 313 | 180–311 | 未退化 |
+| 增量滚动最大停顿 | — | — | 165 | 与 ListView 的 114–150 同量级 |
+| `realized` 容器 | 38–95 | 245（50%） | 358–409（100%）/528（增量） | 二维缓存：按“行×列”保留，仍远小于总数 |
+| 每批布局耗时 | — | 209 ms（n=2） | 140 ms（n=2）/136 ms（n=6） | 新增探针 `[FV] layoutAfterBatch` |
+
+- 换 `GridView` 后最需要盯的是**滚动时的图标解码**：UIA 跳到 50% 会跨过几百个中间容器，逐容器请求图标曾把增量滚动拖到 1469 ms。
+  改为“滚动/布局停止 120–150 ms 后，只对 `ItemsWrapGrid.FirstVisibleIndex/LastVisibleIndex` ±2 行请求”后，
+  100k 增量滚动回落到 165 ms、跳跃滚动 180–325 ms。
+- `realized` 口径变化：`GridView` 回收队列保留多行容器，UIA 累计“唯一容器数”会到几百；这是缓存不是泄漏（`visibleMissing` 稳态回填 0）。
+
+### 6.4 内存（100k，Release，`-MemGc -NoOcc`，log 231356）
+
+| 场景 | WS / Private | managed | estModel |
+| --- | --- | --- | --- |
+| idle | 100.2 / 25.9 MB | 0.47 MB | 0 |
+| feedDone | 152.9 / 78.6 MB | 15.81 MB | 14.69 MB |
+| iconsSettle | 168.8 / 84.5 MB | 15.78 MB | 14.69 MB |
+| scrollSettle（100%） | 177.0 / 88.3 MB | 15.79 MB | 14.69 MB |
+
+- 与 ListView 终态对照：feedDone Private **64.4 → 78.6 MB（+14.2）**、iconsSettle 79.5 → 84.5（+5.0）、
+  scrollSettle 76.7 → 88.3（+11.6）；WS 反而略低（159.5 → 152.9）。managed 仅 +0.46 MB（15.35 → 15.81）。
+- 归因：多出来的是 `GridView` 的二维容器/回收队列在原生侧的开销，不改变条目模型；这是换控件的**已知权衡**，如实记为回归项。
+- 条目模型自持仍是 ~14.9 MB，第 4.7 节的结构性下限结论不变。
+
+### 6.5 过程中修掉的问题
+
+| 问题 | 现象 | 修法 |
+| --- | --- | --- |
+| 启动早于导航日志 | UIA 判定 `autoEntry=False` | 导航移出 `DemoShell` 构造函数，改由挂好日志后的 `NavigateHome()` 调用 |
+| 布局探针失效 | `layoutAfterBatch` 从未出现 | `AttachScrollViewer` 成功后不再退订 `LayoutUpdated` |
+| `Opacity=0` 首帧太便宜 | 动画启动后才发现真正首帧要 ~700 ms，淡入被卡住 | 5% 幽灵帧 + 等 2 个 tick + Composition 动画 |
+| 动画完成回调被拖慢 | 日志出现 36 ms / 720 ms 抖动 | `DispatcherTimer` → 后台单次 `System.Threading.Timer` |
+| 100k 跳跃滚动 >1 s | 图标逐个容器解码 | 图标请求去抖 + 只取最终可视区 |
+| 枚举批次误降 | 遮挡检测把 shell 桌面算成覆盖 | 排除 `Progman/WorkerW/Shell_TrayWnd`（第 5.1 节） |
+
+### 6.6 未完成 / 未验证项（如实记录）
+
+- **降级路径未强制注入**：透明失败（`TrySetIsBackgroundTransparent` 返回 false → 深色不透明兜底）、嵌入失败（`FallbackToTopmost`）、
+  首帧超时（`first-frame-timeout`）三条路径本轮只验证了“正常路径 + 日志文案”，没有人为制造失败。代码存在、逻辑可读，但**未做注入测试**。
+- 100k 全量喂入仍在动画结束后完成（`feedDone` 994–1017 ms），动画期间可见项只有首批 30 项 + 后续按批进入；属渐进呈现，不是阻塞。
+- 喂入期 UI 最大停顿 131–143 ms，仍高于 50 ms 预算（既有短板，第 4.7 节已记录）。
+- 图标首屏为类型字形（`iconsLoadedAtDone=0`），Shell 缩略图在滚动/布局停止后补上；这是去抖的代价。
+- `GridView` 的 Private +14.2 MB 未回收；若后续要求严控内存，需要减缓存行数或改回按需回收策略。
+- `workerw`（壁纸层）仍保留 CLI 参数但不再是产品模式；`desktoppane` 覆盖矩形内桌面图标不可点（交互的固有代价）。
+

@@ -38,6 +38,12 @@ param(
     [ValidateSet("click", "hotkey")]
     [string]$ExitBy = "click",
 
+    # 可选：追加真实滚轮增量滚动（比 UIA 跳到 50% 更接近日常滚动），记录 UI 心跳gap
+    [switch]$Wheel,
+
+    # 诊断：跳过图标解码，单独量网格布局代价
+    [switch]$NoIcons,
+
     [int]$Repeats = 1,
 
     [int]$ScrollPercent = 50,
@@ -122,6 +128,7 @@ public static class RealMouse
 
     const uint LEFTDOWN = 0x0002;
     const uint LEFTUP = 0x0004;
+    const uint WHEEL = 0x0800;
     const uint KEYUP = 0x0002;
     const byte VK_CONTROL = 0x11;
     const byte VK_F4 = 0x73;
@@ -155,6 +162,13 @@ public static class RealMouse
         mouse_event(LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
         System.Threading.Thread.Sleep(40);
         mouse_event(LEFTUP, 0, 0, 0, UIntPtr.Zero);
+    }
+
+    public static void Wheel(int x, int y, int delta)
+    {
+        SetCursorPos(x, y);
+        System.Threading.Thread.Sleep(60);
+        mouse_event(WHEEL, 0, 0, (uint)delta, UIntPtr.Zero);
     }
 
     public static void SendCtrlF4()
@@ -364,6 +378,7 @@ Set-Content -Path $resultFile -Value "mode=$Mode dir=$Dir expect=$Expect log=$Lo
 $argString = "--mode $Mode --transparent 1 --fill work --dir `"$Dir`" --log `"$LogPath`""
 if ($MemGc) { $argString += " --memgc 1" }
 if ($NoOcc) { $argString += " --occ 0" }
+if ($NoIcons) { $argString += " --icons 0" }
 $aumid = "$($pkg.PackageFamilyName)!App"
 $processId = [DemoLauncher]::Activate($aumid, $argString)
 $proc = Get-Process -Id ([int]$processId)
@@ -397,8 +412,18 @@ $quitBtn = Find-ByName $scope "退出"
 
 Add-Result "found: fileView=$([bool]$fileViewBtn) transparency=$([bool]$trans) quit=$([bool]$quitBtn)"
 
+# v1.0：启动自动进入文件视图（无 PageA 入口按钮）。日志里已经有导航记录时直接判定。
+$autoEntry = $false
+if (-not $fileViewBtn) {
+    $autoEntry = Wait-LogMark "[NAV] Navigated to WinUI2Demo.FileViewPage" 8000
+    Add-Result "autoEntry=$autoEntry (v1.0 启动直接进入文件视图)"
+}
+
 # 1) 真实点击进入文件视图
-if ($fileViewBtn) {
+if ($autoEntry) {
+    Add-Result "PASS enter: v1.0 启动自动进入 FileViewPage（无需手动点击）"
+}
+elseif ($fileViewBtn) {
     Click-Element $fileViewBtn
     $ok = Wait-LogMark "[NAV] Navigated to WinUI2Demo.FileViewPage" 12000
     if (-not $ok) {
@@ -409,7 +434,7 @@ if ($fileViewBtn) {
     if ($ok) { Add-Result "PASS enter: 真实点击进入 FileViewPage" }
     else { Add-Result "FAIL enter: 未收到 FileViewPage 导航"; $fail++ }
 }
-else { Add-Result "FAIL enter: UIA 未找到“→ 文件视图”"; $fail++ }
+else { Add-Result "FAIL enter: 既没有自动进入日志，也没有“→ 文件视图”入口"; $fail++ }
 
 # 2) 等枚举/喂入完成
 $feedDone = Wait-LogCount "\[FV\] feed done" 1 30000
@@ -469,8 +494,12 @@ else { Add-Result "FAIL feed: 未找到 feed done 明细"; $fail++ }
 $mHb = [regex]::Matches($text, "\[FV\] heartbeat feed maxGapMs=(\d+) samples=(\d+)") | Select-Object -Last 1
 if ($mHb) {
     $gap = [int]$mHb.Groups[1].Value
-    Add-Result "heartbeat feed maxGapMs=$gap samples=$($mHb.Groups[2].Value)"
-    if ($gap -gt 500) { Add-Result "FAIL heartbeat: 喂入期间 UI 停顿 ${gap}ms > 500ms"; $fail++ }
+    $samples = [int]$mHb.Groups[2].Value
+    Add-Result "heartbeat feed maxGapMs=$gap samples=$samples"
+    if ($samples -eq 0) {
+        Add-Result "INFO heartbeat: 喂入全部落在启动闸门内，无有效样本（启动闸门另由 layoutAfterBatch/revealGate 记录）"
+    }
+    elseif ($gap -gt 500) { Add-Result "FAIL heartbeat: 喂入期间 UI 停顿 ${gap}ms > 500ms"; $fail++ }
     else { Add-Result "PASS heartbeat: 喂入期间 UI 最大停顿 ${gap}ms" }
 }
 else { Add-Result "FAIL heartbeat: 未找到心跳汇总"; $fail++ }
@@ -598,7 +627,8 @@ if ($list) {
                 $mView.Groups[1].Value, $mView.Groups[2].Value, $mView.Groups[3].Value, $mView.Groups[4].Value)
             if ($first -gt 100) { Add-Result "PASS scroll: 已滚动到中段（first=$first）" }
             else { Add-Result "FAIL scroll: first=$first，未到中段"; $fail++ }
-            if ($realized -lt 200) { Add-Result "PASS virtualization: 容器 realized=$realized（远小于列表项数）" }
+            # GridView/ItemsWrapGrid 是二维缓存区（上下各预取数行），realized 会比 ListView 多；只要远小于总数即可
+            if ($realized -lt 1000) { Add-Result "PASS virtualization: 容器 realized=$realized（远小于列表项数，网格二维缓存）" }
             else { Add-Result "FAIL virtualization: realized=$realized 过多"; $fail++ }
         }
         else { Add-Result "FAIL scroll: 未收到 view(settle) 日志"; $fail++ }
@@ -612,6 +642,35 @@ if ($list) {
     }
 }
 else { Add-Result "FAIL scroll: UIA 未找到 FileList"; $fail++ }
+
+# 4a) 可选：真实滚轮增量滚动（先回到顶部，再连续向下滚 12 格），记录 UI 心跳 gap
+if ($Wheel -and $list) {
+    try {
+        $sp3 = $list.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern)
+        $sp3.SetScrollPercent(-1, 0)
+        Start-Sleep -Milliseconds 1600
+        $r = $list.Current.BoundingRectangle
+        $cx = [int]($r.Left + $r.Width / 2)
+        $cy = [int]($r.Top + $r.Height / 2)
+        $before = ([regex]::Matches((Read-Log), "\[FV\] view\(settle\)")).Count
+        # 注意：嵌入 Progman 的窗口拿不到键盘焦点，WM_MOUSEWHEEL 会被丢弃（实测滚轮无效）；
+        # 这里用 UIA 的 SmallIncrement 增量滚动模拟日常逐行滚动，依然能测每一次滚动后的布局/图标代价。
+        for ($i = 0; $i -lt 16; $i++) {
+            $sp3.Scroll([System.Windows.Automation.ScrollAmount]::NoAmount,
+                        [System.Windows.Automation.ScrollAmount]::SmallIncrement)
+            Start-Sleep -Milliseconds 100
+        }
+        $okW = Wait-LogCount "\[FV\] view\(settle\)" ($before + 1) 10000
+        Start-Sleep -Milliseconds 300
+        $tW = Read-Log
+        $mWv = [regex]::Matches($tW, "\[FV\] view\(settle\) first=(-?\d+) last=(-?\d+) realized=(\d+) shown=(\d+)") | Select-Object -Last 1
+        $mWh = [regex]::Matches($tW, "\[FV\] heartbeat scroll maxGapMs=(\d+) samples=(\d+)") | Select-Object -Last 1
+        if ($mWv) { Add-Result ("incremental settle={0} first={1} last={2} realized={3}" -f $okW, $mWv.Groups[1].Value, $mWv.Groups[2].Value, $mWv.Groups[3].Value) }
+        if ($mWh) { Add-Result "incremental heartbeat maxGapMs=$($mWh.Groups[1].Value) samples=$($mWh.Groups[2].Value)" }
+        if (-not $okW -or -not $mWv) { Add-Result "FAIL incremental: 未收到增量滚动后的 settle 日志"; $fail++ }
+    }
+    catch { Add-Result "FAIL incremental: $($_.Exception.Message)"; $fail++ }
+}
 
 # 4b) 可选：滚动扫描，观察图标缓存上限/淘汰/回填（每次停 1.5 秒等 settle 汇总）
 if ($Sweep.Count -gt 0 -and $list) {
@@ -631,29 +690,34 @@ if ($Sweep.Count -gt 0 -and $list) {
     }
 }
 
-# 5) 返回 PageA，再进入一次文件页（导航进/出后能力仍正常）
-# PageA 上也有一个禁用的“← 返回”，进入文件页后必须重新查找当前页的返回按钮
-$backBtn = Find-ByName $scope "← 返回"
-if ($backBtn) {
-    Click-Element $backBtn
-    $okBack = Wait-LogMark "[NAV] Navigated to WinUI2Demo.PageA" 6000
-    if ($okBack) { Add-Result "PASS back: 返回 PageA 成功" }
-    else { Add-Result "FAIL back: 未返回 PageA"; $fail++ }
+# 5) 返回/重进：v1.0 启动即文件视图，没有 PageA 返回栈 → 跳过；旧 demo 流程保留
+if ($autoEntry) {
+    Add-Result "SKIP back/reenter: v1.0 自动进入文件视图，无 PageA 返回栈"
 }
-else { Add-Result "FAIL back: UIA 未找到“← 返回”"; $fail++ }
-
-if ($fileViewBtn) {
-    # 返回后 PageA 若被重新创建，旧 UIA 元素会失效（BoundingRectangle 为 0/NaN），必须等新元素可点
-    Start-Sleep -Milliseconds 800
-    $fileViewBtn2 = Wait-UsableElement "→ 文件视图" 6000
-    if ($fileViewBtn2) {
-        Click-Element $fileViewBtn2
-        $okReenter = Wait-LogCount "\[NAV\] Navigated to WinUI2Demo.FileViewPage" 2 8000
-        $okRefeed = Wait-LogCount "\[FV\] feed done" 2 30000
-        if ($okReenter -and $okRefeed) { Add-Result "PASS reenter: 第二次进入文件页并完成枚举" }
-        else { Add-Result "FAIL reenter: 重新进入失败（nav=$okReenter feed=$okRefeed）"; $fail++ }
+else {
+    # PageA 上也有一个禁用的“← 返回”，进入文件页后必须重新查找当前页的返回按钮
+    $backBtn = Find-ByName $scope "← 返回"
+    if ($backBtn) {
+        Click-Element $backBtn
+        $okBack = Wait-LogMark "[NAV] Navigated to WinUI2Demo.PageA" 6000
+        if ($okBack) { Add-Result "PASS back: 返回 PageA 成功" }
+        else { Add-Result "FAIL back: 未返回 PageA"; $fail++ }
     }
-    else { Add-Result "FAIL reenter: PageA 的“→ 文件视图”按钮未恢复可点"; $fail++ }
+    else { Add-Result "FAIL back: UIA 未找到“← 返回”"; $fail++ }
+
+    if ($fileViewBtn) {
+        # 返回后 PageA 若被重新创建，旧 UIA 元素会失效（BoundingRectangle 为 0/NaN），必须等新元素可点
+        Start-Sleep -Milliseconds 800
+        $fileViewBtn2 = Wait-UsableElement "→ 文件视图" 6000
+        if ($fileViewBtn2) {
+            Click-Element $fileViewBtn2
+            $okReenter = Wait-LogCount "\[NAV\] Navigated to WinUI2Demo.FileViewPage" 2 8000
+            $okRefeed = Wait-LogCount "\[FV\] feed done" 2 30000
+            if ($okReenter -and $okRefeed) { Add-Result "PASS reenter: 第二次进入文件页并完成枚举" }
+            else { Add-Result "FAIL reenter: 重新进入失败（nav=$okReenter feed=$okRefeed）"; $fail++ }
+        }
+        else { Add-Result "FAIL reenter: PageA 的“→ 文件视图”按钮未恢复可点"; $fail++ }
+    }
 }
 
 # 6) 可选：切到图片目录，验证真缩略图补上

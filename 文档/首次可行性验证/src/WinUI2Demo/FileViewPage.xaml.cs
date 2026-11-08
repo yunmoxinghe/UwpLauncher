@@ -43,8 +43,8 @@ namespace WinUI2Demo
     }
 
     /// <summary>
-    /// 文件视图页：Win32 后台枚举 + 时间片批量喂入 + ListView 虚拟化 + 两段式图标。
-    /// 顶栏的透明/嵌入桌面/退出仍由 DemoShell 控制，本页不改变宿主样式。
+    /// 文件视图页：Win32 后台枚举 + 时间片批量喂入 + GridView/ItemsWrapGrid 虚拟化 + 两段式图标。
+    /// 顶栏的透明/退出仍由 DemoShell 控制，本页不改变宿主样式。
     /// </summary>
     public sealed partial class FileViewPage : Page
     {
@@ -61,6 +61,8 @@ namespace WinUI2Demo
         private DispatcherTimer? _heartbeatTimer;
         private DispatcherTimer? _scrollSummaryTimer;
         private DispatcherTimer? _iconSettleTimer;
+        // 滚动/布局停止后再补图标：避免 UIA 跳转/快速滚动时对中间位置的几百个容器逐页解码
+        private DispatcherTimer? _iconQueueTimer;
         private ScrollViewer? _scrollViewer;
         private bool _active;
         private bool _feedDone;
@@ -97,6 +99,12 @@ namespace WinUI2Demo
         private int _hbSamples;
         private long _lastViewLogTicks;
         private int _attachAttempts;
+        // 每次 Reset 之后第一次布局的耗时（换 GridView 后的关键回归指标）
+        private bool _layoutPending;
+        private long _layoutPendingTicks;
+        private int _layoutPendingBatch;
+        private int _layoutPendingItems;
+        private long _layoutMaxMs;
 
         public FileViewPage()
         {
@@ -104,6 +112,9 @@ namespace WinUI2Demo
             FileList.Loaded += (_, __) => AttachScrollViewer();
             // NativeAOT 下实测 Loaded 不一定会触发，布局变化时也尝试挂载
             FileList.LayoutUpdated += OnListLayoutUpdated;
+            // 启动时序证据：页面进入可视树并完成第一次布局的时间点
+            Loaded += (_, __) => Program.Log(
+                $"[STARTUP] page Loaded name={GetType().Name} t={Program.StartupMs()}ms");
         }
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -249,6 +260,8 @@ namespace WinUI2Demo
             _scrollSummaryTimer = null;
             _iconSettleTimer?.Stop();
             _iconSettleTimer = null;
+            _iconQueueTimer?.Stop();
+            _iconQueueTimer = null;
             _restoreTimer?.Stop();
             _restoreTimer = null;
         }
@@ -262,12 +275,39 @@ namespace WinUI2Demo
             _heartbeatTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
             _heartbeatTimer.Tick += (_, __) => OnHeartbeat();
             _heartbeatTimer.Start();
+
+            _iconQueueTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+            _iconQueueTimer.Tick += (_, __) =>
+            {
+                _iconQueueTimer?.Stop();
+                QueueVisibleIcons();
+            };
+            _iconQueueTimer.Start();
+        }
+
+        private bool IconQueuePending => _iconQueueTimer?.IsEnabled == true;
+
+        /// <summary>重新计时：连续滚动时不断延后，直到停下 120-150 ms 才按最终可视区补图标。</summary>
+        private void ScheduleVisibleIconQueue(int delayMs = 150)
+        {
+            if (_iconQueueTimer is null)
+                return;
+            _iconQueueTimer.Interval = TimeSpan.FromMilliseconds(delayMs);
+            _iconQueueTimer.Stop();
+            _iconQueueTimer.Start();
         }
 
         /// <summary>UI 线程心跳：两次 Tick 的间隔最大值就是喂入期间 UI 被占用的最长时段。</summary>
         private void OnHeartbeat()
         {
             var now = Stopwatch.GetTimestamp();
+            // 启动闸门（隐藏创建→首帧→动画开始）不计入喂入心跳，避免和 FV 的真实 UI 停顿混淆；
+            // 首帧前的布局另由 [FV] layoutAfterBatch 单独记录。
+            if (Program.StartupRevealInProgress)
+            {
+                _hbLastTicks = now;
+                return;
+            }
             if (_hbLastTicks != 0)
             {
                 var gap = (long)((now - _hbLastTicks) * 1000.0 / Stopwatch.Frequency);
@@ -300,6 +340,10 @@ namespace WinUI2Demo
 
             Items.AddRangeSilent(batch.Items);
             Items.RaiseReset();
+            _layoutPending = true;
+            _layoutPendingTicks = Stopwatch.GetTimestamp();
+            _layoutPendingBatch = batch.BatchIndex;
+            _layoutPendingItems = Items.Count;
             _batchCount = batch.BatchIndex;
             if (batch.Items.Count > _maxBatchItems)
                 _maxBatchItems = batch.Items.Count;
@@ -542,12 +586,55 @@ namespace WinUI2Demo
             if (args.Item is FileEntry entry)
             {
                 _realizedEntries.Add(entry);
-                QueueIcon(entry);
+                // 滚动/布局稳定前不逐容器请求；停下后由 QueueVisibleIcons 一次性取最终可视区
+                if (!IconQueuePending)
+                    QueueIconIfNearViewport(entry, args.ItemIndex);
             }
+        }
+
+        /// <summary>只为可视区（±2 项）请求图标；二维缓存区离屏项不解码，滚入时由 ViewChanged 补。</summary>
+        private void QueueIconIfNearViewport(FileEntry entry, int index)
+        {
+            var panel = FileList.ItemsPanelRoot as ItemsWrapGrid;
+            if (panel is null)
+            {
+                QueueIcon(entry);
+                return;
+            }
+
+            var first = panel.FirstVisibleIndex;
+            var last = panel.LastVisibleIndex;
+            if (first < 0 || last < 0)
+            {
+                // 可视区尚未确定：交给 150 ms 后的 QueueVisibleIcons，避免缓存区容器抢先解码
+                return;
+            }
+
+            if (index >= first - 2 && index <= last + 2)
+                QueueIcon(entry);
+        }
+
+        private void QueueVisibleIcons()
+        {
+            var panel = FileList.ItemsPanelRoot as ItemsWrapGrid;
+            if (panel is null || Items.Count == 0)
+                return;
+
+            var first = panel.FirstVisibleIndex;
+            var last = panel.LastVisibleIndex;
+            if (first < 0 || last < 0)
+                return;
+
+            var start = Math.Max(0, first - 2);
+            var end = Math.Min(Items.Count - 1, last + 2);
+            for (var i = start; i <= end; i++)
+                QueueIcon(Items[i]);
         }
 
         private void QueueIcon(FileEntry entry)
         {
+            if (!Program.IconsEnabled)
+                return;
             // 目录用文件夹字形；文件才请求 Shell 缩略图/真图标
             if (!_active || entry.IsDirectory || entry.ThumbnailState != 0)
                 return;
@@ -854,7 +941,6 @@ namespace WinUI2Demo
             _scrollViewer = FindScrollViewer(FileList);
             if (_scrollViewer is not null)
             {
-                FileList.LayoutUpdated -= OnListLayoutUpdated;
                 _scrollViewer.ViewChanged += Scroll_ViewChanged;
                 Program.Log("[FV] scrollviewer attached");
                 return;
@@ -863,19 +949,32 @@ namespace WinUI2Demo
             // Loaded 时模板可能还没展开（NativeAOT 下实测会遇到），下一次布局再试
             if (_attachAttempts++ < 2)
                 Program.Log($"[FV] scrollviewer not found (attempt={_attachAttempts})");
-            FileList.LayoutUpdated -= OnListLayoutUpdated;
-            FileList.LayoutUpdated += OnListLayoutUpdated;
         }
 
         private void OnListLayoutUpdated(object? sender, object e)
         {
             AttachScrollViewer();
+            // GridView 的二维缓存会提前 realize 数百个容器；布局稳定后再按最终可视区补图标，
+            // 避免离屏项/滚动中间位置触发大量 Shell 缩略图解码把 UI 线程拖住。
+            ScheduleVisibleIconQueue();
+            if (!_layoutPending)
+                return;
+
+            _layoutPending = false;
+            var ms = (long)((Stopwatch.GetTimestamp() - _layoutPendingTicks) * 1000.0 / Stopwatch.Frequency);
+            if (ms > _layoutMaxMs)
+                _layoutMaxMs = ms;
+            Program.Log($"[FV] layoutAfterBatch n={_layoutPendingBatch} items={_layoutPendingItems} ms={ms}");
         }
 
         private void Scroll_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
         {
             if (!_feedDone)
                 return;
+
+            // 滚动时新进入可视区的条目不会重发 ContainerContentChanging；
+            // 这里只重排定时器，停下后再按最终可视区补图标（跳转经过的中间位置不再解码）
+            ScheduleVisibleIconQueue(120);
 
             var now = Stopwatch.GetTimestamp();
             if (now - _lastViewLogTicks >= ViewLogIntervalTicks)
@@ -908,7 +1007,7 @@ namespace WinUI2Demo
 
         private void LogView(string reason)
         {
-            var panel = FileList.ItemsPanelRoot as ItemsStackPanel;
+            var panel = FileList.ItemsPanelRoot as ItemsWrapGrid;
             var first = panel?.FirstVisibleIndex ?? -1;
             var last = panel?.LastVisibleIndex ?? -1;
             var missing = 0;

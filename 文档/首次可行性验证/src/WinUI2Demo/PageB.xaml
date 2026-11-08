@@ -36,6 +36,7 @@
         <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="10" Margin="12,10,12,8"
                     VerticalAlignment="Top">
             <Button x:Name="BackButton" Content="← 返回 Page A" Click="Back_Click" />
+            <Button x:Name="FileViewButton" Content="→ 文件视图" Click="GoFileView_Click" />
             <TextBlock x:Name="InstanceText" Foreground="White" FontSize="13"
                        VerticalAlignment="Center" />
         </StackPanel>

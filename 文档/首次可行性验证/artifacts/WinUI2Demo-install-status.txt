@@ -1,4 +1,4 @@
-mode=loose-register
+﻿mode=loose-register
 signedInstallError=
 packageFullName=WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4
 packageFamilyName=WinUI2Demo_p06pf12qzbwg4

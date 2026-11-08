@@ -281,3 +281,33 @@ XAML 内容：左右两列，左列无背景，右列 50% 红（`#80FF0000`）�
 - `artifacts/workspace-20261108-172144.result.txt`（含四组采样与判定）
 - `artifacts/workspace-<mode>-<fill>-20261108-172144.log/.png`、`workspace-20261108-172144-baseline.png`
 - [scripts/test-workspace.ps1](scripts/test-workspace.ps1)
+
+## 阶段 9：文件视图 Page（新增，已完成）
+
+### 目标与范围
+
+按 `文档/文件显示性能调研/` 落地 `FileViewPage`，可从 PageA/PageB 导航进入；只做第一版：后台 Win32 枚举 + 时间片喂入 + 虚拟化列表 + 两段式图标 + 可见进度。
+
+### 实现
+
+- `FileEnumeration.cs`：`FindFirstFileExW` + `FindExInfoBasic` + `FIND_FIRST_EX_LARGE_FETCH`，后台线程；首批 60 项 / 25 ms（至少 30 项，硬上限 100 ms），之后每 500 ms 或 2 万项一批；`FileEntry` 的大小/时间/类型字符串在后台预格式化。
+- `FileViewPage.xaml(.cs)`：`ListView` + `ItemsStackPanel` + `x:Bind` + `x:Phase`；`BulkObservableCollection` 每批只发一次 `Reset`，不逐项 marshal；进度/指标状态栏；`OnNavigatedFrom` 取消并 generation 隔离旧回调。
+- 图标：扩展名字形立即可见 → 容器实现时 8 路信号量 `StorageFile.GetThumbnailAsync` 补 32 px 真图标，失败保留字形（偏离调研的 `IShellItemImageFactory`，理由与代价见 VERIFICATION 12.2）。
+- 导航：PageA/PageB 增加“→ 文件视图”；`--dir` 指定默认目录，`run-demo.ps1 -Dir` 可传。
+
+### 本机实测
+
+- 数据集：`C:\Users\gold\perf-research\data\f10k`（10 000）、`f100k`（100 000），真实 NTFS 目录。
+- topmost + f10k：首批 60 @111 ms、首次容器 @139 ms、枚举 48 ms、全部入列表 113 ms、2 批、UI 应用最大 1 ms、喂入心跳 103 ms；滚动 first=4996、容器 79。
+- desktoppane + f100k：首批 30 @126 ms、首次容器 @183 ms、枚举 321 ms、全部入列表 479 ms、6 批、UI 应用最大 5 ms、喂入心跳 265 ms；滚动 first=49996、容器 99。
+- 图标：f10k/f100k 滚动后 79/79/0（请求/成功/失败）；图片目录 2/2/0。
+- 输入/透明回归：两轮均通过真实点击进入、页内透明关/开、返回、再进入、退出；desktoppane 轮 Ctrl+F4 宏键退出通过。
+- 证据：`artifacts/WinUI2Demo-FileView-topmost-20261108-175823.result.txt`、`...-desktoppane-20261108-175844.result.txt`、[scripts/test-fileview-uia.ps1](scripts/test-fileview-uia.ps1)。
+
+### 失败路线与未完成
+
+- `workerw`（壁纸层）点击仍到不了宿主（命中 `SHELLDLL_DefView`），该轮 `failures=11`；这是该层定位决定，不是本页回归。可点击嵌入用 `desktoppane`。
+- 100k 喂入期出现过一次 ~265 ms UI 心跳间隔（XAML 大批 Reset 的布局成本；集合写入仅 5 ms）；后续点击/滚动正常，但不宣称“零影响”。
+- 冷启动首批曾只有 1 项，已通过“open 后计时 + 最少 30 项”修正。
+- 未做：排序、分组、右键菜单、拖放、搜索、缩略图大图、多目录并发、网络路径超时、实时刷新、键盘快捷键。
+- 未覆盖：多显示器 / 副屏异 DPI；100k 的 topmost、10k 的 desktoppane 未成对跑（各有一条模式覆盖）。

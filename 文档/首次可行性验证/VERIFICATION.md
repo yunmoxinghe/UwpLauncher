@@ -696,3 +696,62 @@ insets: left=0 top=0 right=0 bottom=72px(48dip)
 | 运行中改 DPI / 拔插显示器 | **未覆盖**：无法在不改系统设置的前提下安全触发；已接 `WM_DPICHANGED`/`WM_DISPLAYCHANGE`，未实测 |
 | 任务栏自动隐藏 / 其他 AppBar | **未覆盖**；仅处理 `SPI_SETWORKAREA` 通知 |
 | 与输入修复互不破坏 | **已实测**：desktoppane 模式同时通过 UIA 4/4 与工作区 4 组组合 |
+
+## 12. 文件视图 Page（本轮新增）
+
+### 12.1 调研依据与取舍
+
+依据 `文档/文件显示性能调研/`（该目录本轮未改动）。调研结论中与本实现直接相关的几条：
+
+1. **枚举不是瓶颈**：本机对 1 万/10 万项目录的 `FindFirstFileExW` 全量枚举在百毫秒量级；`FindExInfoBasic` 比 `FindExInfoStandard` 更快；`FIND_FIRST_EX_LARGE_FETCH` 是微软官方提供的大缓冲开关，但该数据集上不是数量级收益。具体数字与官方/社区来源见调研文档与 `PERF-RESEARCH.md` / `FILES-SOLUTION-REFERENCE.md`。
+2. **成本主要在图标与 UI 喂入**：Shell 缩略图单张成本远高于一条枚举记录，所以图标必须“可见才取 + 限流 + 失败回退”，不能枚举时逐项取。
+3. **喂入策略（Files 的做法，属社区源码经验）**：首批 25 ms（约 30–60 项）先上屏，之后每 500 ms 追加一批；ListView 用 `ItemsStackPanel` 虚拟化、`x:Bind` + `x:Phase` 降低绑定开销；1 万项以上不做即时排序，按枚举顺序显示。
+4. **UWP/WinUI 2 没有“多条目插入”通知**：只能整体 `Reset`（`ObservableCollection` 的 Reset 映射为 `IObservableVector` 变更），因此本实现每批只发一次 Reset，不逐项 marshal。
+
+官方明确说明的部分：`FindFirstFileExW`、`FindExInfoBasic`、`FIND_FIRST_EX_LARGE_FETCH`、`ItemsStackPanel`、`x:Phase` 的语义与限制来自微软 API 文档（调研文档已列出出处）。社区经验部分：Files 的具体时间片（25 ms / 500 ms）、8 路并发、首批条数，是源码阅读 + 本机复测得到的经验值，不是微软保证的行为。
+
+### 12.2 实现架构与关键代码位置
+
+| 层 | 文件 | 关键位置 |
+|---|---|---|
+| Win32 枚举后端 | [FileEnumeration.cs](src/WinUI2Demo/FileEnumeration.cs) | P/Invoke `FindFirstFileExW`/`FindNextFileW`/`FindClose` 在 158–176；首片规则 129–134、251–259；`BuildEntry` 324 |
+| 批量集合 | [FileViewPage.xaml.cs](src/WinUI2Demo/FileViewPage.xaml.cs) | `BulkObservableCollection` 18–40：`AddRangeSilent` + 一次 `Reset` |
+| 喂入/测量 | 同上 | `StartLoad` 140、`ApplyBatch` 245、`OnEnumDone` 284、滚动观测 483 |
+| 图标两段式 | 同上 | `ContainerContentChanging` 354、`QueueIcon` 374、`LoadIconAsync` 387（信号量 8 路） |
+| 页面 UI | [FileViewPage.xaml](src/WinUI2Demo/FileViewPage.xaml) | `ListView` 28、`ItemsStackPanel` 38–42、`x:Phase` 60/65/67/69/72 |
+| 导航入口 | [PageA.xaml](src/WinUI2Demo/PageA.xaml)、[PageB.xaml](src/WinUI2Demo/PageB.xaml) | “→ 文件视图”按钮；回退用 `Frame.GoBack()` |
+| 默认目录参数 | [Program.cs](src/WinUI2Demo/Program.cs) | `--dir` → `FileViewDefaultPath`；不传时页内回退 `Downloads`/用户目录 |
+
+行为细节：
+
+- **枚举**：后台线程一次 `FindFirstFileExW(path\*)`，参数 `FindExInfoBasic=1`、`FIND_FIRST_EX_LARGE_FETCH=0x2`。不递归，只列当前目录。
+- **首批**：从“目录打开成功之后”开始计时（`FindFirstFileEx` 冷启动可能已超过 25 ms，若从线程启动计时首批会只剩 1 项，已实测踩到）。规则：累计 60 项立即发；或 25 ms 且至少 30 项；或硬上限 100 ms。10k 实测首批 60 项；100k 实测首批 30 项。
+- **后续批**：每 500 ms 或累计 20 000 项发一批；每批在 UI 线程一次 `AddRangeSilent` + 一次 `Reset`。字符串（大小/时间/类型）全部在后台构造，UI 不做格式化。
+- **进度**：250 ms 刷新一次状态栏“后台已扫描 / 已显示 / 批次”；完成后显示“枚举 ms / 首批 ms / 全部入列表 ms / 图标成功数 / 错误”。
+- **图标**：模板里先用扩展名映射的 Segoe MDL2 字形（零 Shell 调用、立即可见）；容器实现（非回收队列）时按 8 路信号量请求 `StorageFile.GetThumbnailAsync(ListView, 32, ResizeThumbnail)`，成功后 UI 线程 `BitmapImage.SetSourceAsync` 覆盖到 `Image`，失败保留字形。**这是对调研建议（`IShellItemImageFactory`/Shell COM）的偏离**：demo 里用 WinRT API 代码量更小，实测能拿到 Shell 图标/缩略图；代价是无法精细控制 Shell 取消。
+- **不阻塞导航**：`OnNavigatedFrom` 取消 CTS、停表；每次 `StartLoad` 有 generation，旧批次/旧图标结果不会污染新目录。
+
+### 12.3 实测（UIA 真实点击 + 日志证据）
+
+环境：本机 1 块屏 1920×1080、144 DPI。数据集为调研生成的真实 NTFS 目录：
+`C:\Users\gold\perf-research\data\f10k`（10 000 项）、`C:\Users\gold\perf-research\data\f100k`（100 000 项），均为 1 KB `.dat` 文件。
+
+| 场景 | 首屏 | 全量枚举 | 全部入列表 | 批次数 | UI 应用单批最大 | 喂入期 UI 心跳最大间隔 | 滚动到 50% | 容器数 |
+|---|---|---|---|---|---|---|---|---|
+| topmost + f10k | 首批 60 项 @111 ms；首次容器 @139 ms | 48 ms | 113 ms | 2 | 1 ms | 103 ms（1 个采样） | first=4996 | 79 |
+| desktoppane + f100k | 首批 30 项 @126 ms；首次容器 @183 ms | 321 ms | 479 ms | 6 | 5 ms | 265 ms（3 个采样） | first=49996 | 99 |
+
+- 滚动后图标：f10k 可见 79 项 → `requested=79 loaded=79 failed=0`；f100k 同样 `79/79/0`。
+- 切到 `C:\Windows\Web\Wallpaper\Windows`（2 张 jpg）后重新枚举：`requested=2 loaded=2 failed=0`，证明真缩略图路径生效，不是只有字形。
+- 点击链路（topmost 与 desktoppane 均通过）：真实点击“→ 文件视图”进入 → 页内真实点击透明开关关/开 → 返回 PageA → 再进文件页 → 退出；desktoppane 轮用 Ctrl+F4 宏键退出也通过。
+- 导航进/出后透明仍正常：两轮都在文件页内完成 `[DEMO] transparency toggled` 两次（关→开），并在返回后继续可点。
+- 证据：`artifacts/WinUI2Demo-FileView-topmost-20261108-175823.result.txt/.log`、`WinUI2Demo-FileView-desktoppane-20261108-175844.result.txt/.log`，脚本 [scripts/test-fileview-uia.ps1](scripts/test-fileview-uia.ps1)。
+
+### 12.4 失败路线与限制（如实记录）
+
+1. **workerw（壁纸层）点击失败，不是本页新增问题**：同脚本 `-Mode workerw` 一轮 `failures=11`：UIA 找到按钮但点击后无 `[NAV]`、无 `[FV]`、无 `[INPUT]`；`WindowFromPoint` 命中的是 `SHELLDLL_DefView`（桌面图标视图），鼠标消息根本到不了宿主。该层的定位就是“桌面图标之下”，与第 10 节结论一致；**可点击的嵌入路线是 `desktoppane`**（Progman 子窗口、Z 序在 `SHELLDLL_DefView` 之上）。
+2. **喂入期有一次约 250 ms 的 UI 停顿**：100k 轮心跳最大 265 ms（3 个采样），`uiApplyMaxMs` 只有 5 ms，说明停顿主要在 XAML 对大批 Reset 的布局/自动化处理，而不是集合写入。之后真实点击透明开关、滚动、退出均成功，未出现持续卡死；但“喂入完全不影响交互”这一强断言不成立。
+3. **首批条数受磁盘冷启动影响**：首轮 100k 冷读时首批只有 1 项（`FindFirstFileEx` + 首次 `FindNextFile` 的缓冲读占了 600+ ms），因此改为“从 open 之后计时 + 最少 30 项 / 硬上限 100 ms”；最终 100k 首批 30 项。10k 首批 60 项。
+4. **图标并发 8 路是队列上限，不是在途取消**：已被回收的项在开始前会因 generation/CTS 跳过；已开始的 Shell 调用无法强制取消，只能完成后丢弃，失败计入 `failed`，字形仍在。
+5. **本版未做**：排序、分组、右键菜单、拖放、搜索/过滤、缩略图大图质量（只取 32 px）、多目录并发枚举（调研建议可 8 路并发，本版单目录）、网络路径超时/断线重连、文件变更实时刷新、列头点击排序、键盘快捷键。
+6. **覆盖限制**：本机只有 1 块屏，未覆盖多显示器/副屏异 DPI；未在 100k 上跑 topmost（10k 已覆盖 topmost），未在 10k 上跑 desktoppane（100k 已覆盖 desktoppane）；workerw 只做了“点击失败”对照。

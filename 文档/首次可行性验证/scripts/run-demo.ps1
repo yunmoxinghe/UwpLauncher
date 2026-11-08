@@ -19,6 +19,9 @@
 
 .PARAMETER HoldMs
   非 Selftest 模式下，为了截图而等待的时长（毫秒）。
+
+.PARAMETER Dir
+  文件视图页的默认目录（传给 demo 的 --dir）；不传则页内回退到用户目录/Downloads。
 #>
 param(
     [ValidateSet("topmost", "workerw", "desktoppane")]
@@ -30,6 +33,8 @@ param(
     # 铺满基准：work=铺满工作区（默认）| desktop=铺满整个桌面 | none=固定小窗口
     [ValidateSet("work", "desktop", "none")]
     [string]$Fill = "work",
+
+    [string]$Dir = "",
 
     [switch]$Selftest,
 
@@ -104,6 +109,7 @@ if ($Screenshot -or $Selftest) {
 }
 
 $argString = "--mode $Mode --transparent $(if ($Transparent -eq 'on') { '1' } else { '0' }) --fill $Fill --log $log"
+if ($Dir) { $argString += " --dir `"$Dir`"" }
 if ($Selftest) { $argString += " --selftest" }
 
 $aumid = "$($pkg.PackageFamilyName)!App"

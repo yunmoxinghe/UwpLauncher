@@ -42,6 +42,14 @@ namespace WinUI2Demo
             Frame?.Navigate(typeof(PageB), "from-A");
         }
 
+        private void GoFileView_Click(object sender, RoutedEventArgs e)
+        {
+            Log("[DEMO] PageA -> Navigate(FileViewPage)");
+            Frame?.Navigate(typeof(FileViewPage), Program.FileViewDefaultPath.Length > 0
+                ? Program.FileViewDefaultPath
+                : null);
+        }
+
         private void Back_Click(object sender, RoutedEventArgs e)
         {
             if (Frame?.CanGoBack == true)
@@ -88,6 +96,14 @@ namespace WinUI2Demo
                 Log("[DEMO] PageB -> GoBack()");
                 Frame.GoBack();
             }
+        }
+
+        private void GoFileView_Click(object sender, RoutedEventArgs e)
+        {
+            Log("[DEMO] PageB -> Navigate(FileViewPage)");
+            Frame?.Navigate(typeof(FileViewPage), Program.FileViewDefaultPath.Length > 0
+                ? Program.FileViewDefaultPath
+                : null);
         }
 
         private static void Log(string message) => Program.Log(message);

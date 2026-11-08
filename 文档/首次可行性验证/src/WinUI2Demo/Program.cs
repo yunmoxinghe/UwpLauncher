@@ -117,6 +117,7 @@ namespace WinUI2Demo
         private static readonly List<MonitorInfo> s_monitors = new();
         private static MonitorInfo? s_currentMonitor;
         private static string _workspaceText = "工作区: 初始化中…";
+        internal static string FileViewDefaultPath = "";   // --dir：文件视图默认目录
         private static bool _fillDesktop;   // false=铺满 rcWork，true=铺满 rcMonitor
         private static bool _layoutFixed;   // --fill none：保留测试用的固定小窗口
         private static RECT32 s_sysWork;
@@ -266,6 +267,11 @@ namespace WinUI2Demo
             }
 
             _selftest = args.Length > 0 && Array.IndexOf(args, "--selftest") >= 0;
+
+            // --dir：文件视图页默认目录（不传时页内回退到用户目录）
+            var dir = GetArgValue(args, "--dir");
+            if (!string.IsNullOrWhiteSpace(dir))
+                FileViewDefaultPath = dir!;
         }
 
         private static string? GetArgValue(string[] args, string name)

@@ -56,6 +56,7 @@ namespace WinUI2Probe
 
         private static StreamWriter _log = StreamWriter.Null;
         private static string _mode = "topmost";
+        private static string _content = "winui2";
         private static bool _transparent = true;
         private static int _holdMs = 4000;
         private static int _captureAtMs = 2500;
@@ -104,6 +105,7 @@ namespace WinUI2Probe
 
             var hr = PInvoke.RoInitialize(RO_INIT_TYPE.RO_INIT_SINGLETHREADED);
             Log($"RoInitialize(STA) => hr=0x{hr.Value:X8}");
+            LogPackageIdentity();
 
             // 与 DesktopFlyouts 样例一致：在 Application 构造期间完成 XAML 初始化与消息循环
             _ = new App();
@@ -117,6 +119,10 @@ namespace WinUI2Probe
             var mode = GetArgValue(args, "--mode");
             if (!string.IsNullOrEmpty(mode))
                 _mode = mode!;
+
+            var content = GetArgValue(args, "--content");
+            if (!string.IsNullOrEmpty(content))
+                _content = content!;
 
             var transparent = GetArgValue(args, "--transparent");
             if (!string.IsNullOrEmpty(transparent))
@@ -143,7 +149,7 @@ namespace WinUI2Probe
         {
             try
             {
-                Log($"mode={_mode} transparent={_transparent} hold={_holdMs} captureAt={_captureAtMs}");
+                Log($"mode={_mode} content={_content} transparent={_transparent} hold={_holdMs} captureAt={_captureAtMs}");
 
                 var manager = WindowsXamlManager.InitializeForCurrentThread();
                 Log($"WindowsXamlManager.InitializeForCurrentThread => {manager is not null}");
@@ -186,6 +192,19 @@ namespace WinUI2Probe
             {
                 Cleanup();
                 _log.Flush();
+            }
+        }
+
+        private static void LogPackageIdentity()
+        {
+            try
+            {
+                var id = Windows.ApplicationModel.Package.Current.Id;
+                Log($"[PKG] Package.Current fullName={id.FullName} family={id.FamilyName}");
+            }
+            catch (Exception ex)
+            {
+                Log($"[PKG] no package identity: {ex.GetType().Name} hr=0x{ex.HResult:X8} msg={ex.Message}");
             }
         }
 
@@ -320,6 +339,23 @@ namespace WinUI2Probe
 
                 app.Resources.MergedDictionaries.Add(resources);
                 Log("[WINUI2] XamlControlsResources merged into Application.Resources");
+
+                // 诊断：记录 NavigationView 内容区背景资源，解释透明岛上的半透明白底来自何处
+                foreach (var key in new[] { "NavigationViewContentBackground", "NavigationViewDefaultBackground", "ApplicationPageBackgroundThemeBrush" })
+                {
+                    try
+                    {
+                        var value = app.Resources[key];
+                        var detail = value is SolidColorBrush brush
+                            ? $"{brush.GetType().Name} color=#{brush.Color.A:X2}{brush.Color.R:X2}{brush.Color.G:X2}{brush.Color.B:X2} opacity={brush.Opacity}"
+                            : $"{value?.GetType().FullName}";
+                        Log($"[WINUI2] resource {key} => {detail}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"[WINUI2] resource {key} lookup failed: {ex.GetType().Name}");
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -331,6 +367,13 @@ namespace WinUI2Probe
 
         private static UIElement? BuildContent()
         {
+            if (_content == "grid")
+            {
+                // 诊断用对照：同一打包上下文里不放 WinUI 2 控件，只放原来的判据布局
+                Log("[CONTENT] grid: plain sampling layout (diagnostic)");
+                return BuildSamplingLayout();
+            }
+
             // 实验目标：直接以 WinUI 2 控件（Microsoft.UI.Xaml.Controls）作为 DesktopWindowXamlSource.Content。
             Microsoft.UI.Xaml.Controls.NavigationView nav;
             try
@@ -352,8 +395,30 @@ namespace WinUI2Probe
                 nav.IsBackButtonVisible = Microsoft.UI.Xaml.Controls.NavigationViewBackButtonVisible.Collapsed;
                 nav.PaneDisplayMode = Microsoft.UI.Xaml.Controls.NavigationViewPaneDisplayMode.LeftMinimal;
                 nav.IsPaneOpen = false;
+                // 岛背景透明的前提下，控件自身不能再画一层不透明底色；置为透明属于内容设计，不改变透明开关语义
+                nav.Background = new SolidColorBrush(Colors.Transparent);
 
-                nav.Content = BuildSamplingLayout();
+                var infoBar = new Microsoft.UI.Xaml.Controls.InfoBar
+                {
+                    Severity = Microsoft.UI.Xaml.Controls.InfoBarSeverity.Warning,
+                    Title = "WinUI 2 InfoBar",
+                    Message = "Microsoft.UI.Xaml.dll loaded from the framework package",
+                    IsOpen = true,
+                    IsClosable = false,
+                    Margin = new Thickness(8),
+                };
+                Log($"[WINUI2] InfoBar created, severity={infoBar.Severity}");
+
+                var root = new Grid();
+                root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+                root.Children.Add(infoBar);
+                Grid.SetRow(infoBar, 0);
+                var sampling = BuildSamplingLayout();
+                root.Children.Add(sampling);
+                Grid.SetRow(sampling, 1);
+
+                nav.Content = root;
                 Log("[WINUI2] NavigationView.Content set (WinUI 2 control as island root)");
                 return nav;
             }
@@ -366,7 +431,7 @@ namespace WinUI2Probe
             }
         }
 
-        private static UIElement BuildSamplingLayout()
+        private static Grid BuildSamplingLayout()
         {
             // 与 IslandProbe 相同的判据布局：左列完全透明，右列 50% 红。用比例布局，避免 DPI 缩放影响采样。
             var root = new Grid();
@@ -631,6 +696,8 @@ namespace WinUI2Probe
                 Sample(hdc, "host_top_left", HostX + 5, HostY + 5);
                 Sample(hdc, "backdrop_outside", BackX + 10, BackY + 10);
                 Sample(hdc, "desktop_reference", 10, 700);
+                // WinUI 2 专属控件（InfoBar）右上角留白处：用于证明内容确实由 Microsoft.UI.Xaml 渲染
+                Sample(hdc, "winui2_infobar", HostX + 420, HostY + 30);
             }
             finally
             {

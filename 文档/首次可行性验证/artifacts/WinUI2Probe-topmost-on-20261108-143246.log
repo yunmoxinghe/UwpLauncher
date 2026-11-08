@@ -1,0 +1,37 @@
+﻿[14:32:50.972] === WinUI2Probe ===
+[14:32:50.996] pid=6800 os=Microsoft Windows NT 10.0.26300.0
+[14:32:50.997] RoInitialize(STA) => hr=0x00000001
+[14:32:51.193] [PKG] Package.Current fullName=WinUI2Probe_1.0.0.0_x64__rdz54j04exa60 family=WinUI2Probe_rdz54j04exa60
+[14:32:51.395] mode=topmost content=grid transparent=True hold=5000 captureAt=2500
+[14:32:51.664] WindowsXamlManager.InitializeForCurrentThread => True
+[14:32:51.671] Window.Current => Windows.UI.Xaml.Window
+[14:32:51.696] CoreWindow.GetForCurrentThread => Windows.UI.Core.CoreWindow
+[14:32:51.714] [CoreWindowInterop] hwnd=0x1500C2
+[14:32:52.006] [WINUI2] XamlControlsResources merged into Application.Resources
+[14:32:52.098] [WINUI2] resource NavigationViewContentBackground => SolidColorBrush color=#80FFFFFF opacity=1
+[14:32:52.119] [WINUI2] resource NavigationViewDefaultBackground lookup failed: COMException
+[14:32:52.119] [WINUI2] resource ApplicationPageBackgroundThemeBrush => SolidColorBrush color=#FFF3F3F3 opacity=1
+[14:32:52.133] [RegisterClass] backdrop atom=49934 lastErr=0
+[14:32:52.176] [CreateWindow] backdrop hwnd=0x6502A6 lastErr=0
+[14:32:52.178] [RegisterClass] host atom=49927 lastErr=0
+[14:32:52.183] [CreateWindow] host hwnd=0x370DA8 exStyle=0x200088 lastErr=0
+[14:32:52.256] [DWS] created=True
+[14:32:52.282] [DWS] AttachToWindow(host) => 0x00000000
+[14:32:52.283] [DWS] island hwnd=0x3E0832
+[14:32:52.294] [CONTENT] grid: plain sampling layout (diagnostic)
+[14:32:52.434] [DWS] Content set
+[14:32:52.439] [DWS] island sized to 520x380
+[14:32:52.449] [XST] set_IsBackgroundTransparent(True) => hr=0x00000000 readback=True
+[14:32:52.449] host dpi=144 coreHwnd=0x1500C2 xamlHwnd=0x3E0832
+[14:32:52.465] [SHOW] hostVisible=True xamlVisible=True backdropVisible=True
+[14:32:52.467] [RECT] host screen=(60,60,580,440)
+[14:32:52.468] [RECT] island screen=(60,60,580,440) root=0x370DA8
+[14:32:54.986] [SAMPLE] dpi=144 hostRect=(60,60,520x380) backdrop=(20,20,600x460)
+[14:32:55.014] [SAMPLE] transparent_left (190,269) COLORREF=0x0000FF00 RGB=(0,255,0)
+[14:32:55.031] [SAMPLE] semi_red_right (450,269) COLORREF=0x00007F80 RGB=(128,127,0)
+[14:32:55.047] [SAMPLE] host_top_left (65,65) COLORREF=0x0000FF00 RGB=(0,255,0)
+[14:32:55.063] [SAMPLE] backdrop_outside (30,30) COLORREF=0x0000FF00 RGB=(0,255,0)
+[14:32:55.078] [SAMPLE] desktop_reference (10,700) COLORREF=0x00F5F5F5 RGB=(245,245,245)
+[14:32:55.097] [SAMPLE] winui2_infobar (480,90) COLORREF=0x00007F80 RGB=(128,127,0)
+[14:32:57.626] [CLEANUP] DesktopWindowXamlSource disposed
+[14:32:57.639] [CLEANUP] windows destroyed

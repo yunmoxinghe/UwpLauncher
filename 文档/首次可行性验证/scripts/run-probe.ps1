@@ -28,7 +28,14 @@ param(
     [string]$Transparent = "on",
 
     [int]$HoldMs = 5000,
-    [int]$CaptureAtMs = 2500
+    [int]$CaptureAtMs = 2500,
+
+    # 岛内容：winui2（NavigationView + InfoBar）/ grid（对照诊断，仅原判据布局）
+    [ValidateSet("winui2", "grid")]
+    [string]$Content = "winui2",
+
+    # 以已注册的 MSIX 包身份启动（需要先运行 package-msix.ps1 -Install）
+    [switch]$Packaged
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,8 +43,8 @@ $root = Split-Path -Parent $PSScriptRoot
 $exe = Join-Path $root "src\$Probe\bin\x64\Debug\net10.0-windows10.0.26100.0\$Probe.exe"
 $artifacts = Join-Path $root "artifacts"
 
-if (-not (Test-Path $exe)) {
-    throw "未找到 $exe。请先构建 $Probe（见 VERIFICATION.md 第 5 节）。"
+if (-not $Packaged -and -not (Test-Path $exe)) {
+    throw "未找到 $exe。请先构建 $Probe（见 VERIFICATION.md 第 6 节）。"
 }
 
 New-Item -ItemType Directory -Force -Path $artifacts | Out-Null
@@ -51,6 +58,16 @@ $png = Join-Path $artifacts "$name.png"
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms
 
+function Capture-Screen([string]$path) {
+    $vs = [System.Windows.Forms.SystemInformation]::VirtualScreen
+    $bmp = New-Object System.Drawing.Bitmap $vs.Width, $vs.Height
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.CopyFromScreen($vs.Left, $vs.Top, 0, 0, $bmp.Size)
+    $bmp.Save($path)
+    $g.Dispose()
+    $bmp.Dispose()
+}
+
 $shell = $null
 $minimized = $false
 if ($Mode -eq "workerw") {
@@ -59,31 +76,80 @@ if ($Mode -eq "workerw") {
     $shell.MinimizeAll()
     $minimized = $true
     Start-Sleep -Milliseconds 700
+    # 无窗口遮挡的桌面基准图：用于校验“透出的壁纸色”确实来自壁纸
+    Capture-Screen (Join-Path $artifacts "$name-desktop.png")
+}
+
+function Start-PackagedProbe {
+    $pkg = Get-AppxPackage -Name "WinUI2Probe" | Select-Object -First 1
+    if (-not $pkg) {
+        throw "WinUI2Probe 未注册。请先运行 scripts/package-msix.ps1"
+    }
+
+    $activationSource = @"
+using System;
+using System.Runtime.InteropServices;
+
+[ComImport, Guid("2e941141-7f97-4756-ba1d-9decde894a3d"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface IApplicationActivationManager
+{
+    int ActivateApplication([MarshalAs(UnmanagedType.LPWStr)] string appUserModelId, [MarshalAs(UnmanagedType.LPWStr)] string arguments, int options, out uint processId);
+    int ActivateShellApp([MarshalAs(UnmanagedType.LPWStr)] string appUserModelId, [MarshalAs(UnmanagedType.LPWStr)] string arguments, out uint processId);
+    int ActivateForFile([MarshalAs(UnmanagedType.LPWStr)] string appUserModelId, IntPtr itemArray, [MarshalAs(UnmanagedType.LPWStr)] string verb, out uint processId);
+    int ActivateForProtocol([MarshalAs(UnmanagedType.LPWStr)] string appUserModelId, IntPtr itemArray, out uint processId);
+}
+
+[ComImport, Guid("45BA127D-10A8-46EA-8AB7-56EA9078943C")]
+public class ApplicationActivationManager { }
+
+public static class PackagedProbeLauncher
+{
+    public static uint Activate(string aumid, string arguments)
+    {
+        var mgr = (IApplicationActivationManager)new ApplicationActivationManager();
+        uint pid;
+        // AO_NONE = 0
+        var hr = mgr.ActivateApplication(aumid, arguments, 0, out pid);
+        if (hr < 0) throw new COMException("ActivateApplication failed", hr);
+        return pid;
+    }
+}
+"@
+
+    if (-not ([System.Management.Automation.PSTypeName]"PackagedProbeLauncher").Type) {
+        Add-Type -TypeDefinition $activationSource -Language CSharp
+    }
+
+    $aumid = "$($pkg.PackageFamilyName)!App"
+    $arguments = "--mode $Mode --content $Content --transparent $flag --log $log --hold $HoldMs --capture $CaptureAtMs"
+    $processId = [PackagedProbeLauncher]::Activate($aumid, $arguments)
+    return Get-Process -Id ([int]$processId)
 }
 
 try {
-    $p = Start-Process -FilePath $exe -ArgumentList @(
-        "--mode", $Mode,
-        "--transparent", $flag,
-        "--log", $log,
-        "--hold", "$HoldMs",
-        "--capture", "$CaptureAtMs"
-    ) -PassThru
+    if ($Packaged) {
+        $p = Start-PackagedProbe
+    }
+    else {
+        $p = Start-Process -FilePath $exe -ArgumentList @(
+            "--mode", $Mode,
+            "--content", $Content,
+            "--transparent", $flag,
+            "--log", $log,
+            "--hold", "$HoldMs",
+            "--capture", "$CaptureAtMs"
+        ) -PassThru
+    }
 
     Start-Sleep -Milliseconds ($CaptureAtMs + 900)
 
-    $vs = [System.Windows.Forms.SystemInformation]::VirtualScreen
-    $bmp = New-Object System.Drawing.Bitmap $vs.Width, $vs.Height
-    $g = [System.Drawing.Graphics]::FromImage($bmp)
-    $g.CopyFromScreen($vs.Left, $vs.Top, 0, 0, $bmp.Size)
-    $bmp.Save($png)
-    $g.Dispose()
-    $bmp.Dispose()
+    Capture-Screen $png
 
     $p.WaitForExit($HoldMs + 10000) | Out-Null
     "done: $name (exited=$($p.HasExited))"
     "log: $log"
     "png: $png"
+    if ($Mode -eq "workerw") { "desktop: $(Join-Path $artifacts "$name-desktop.png")" }
 }
 finally {
     if ($minimized -and $shell -ne $null) {

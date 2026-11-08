@@ -137,5 +137,38 @@ XAML 内容：左右两列，左列无背景，右列 50% 红（`#80FF0000`）�
 - 本机已安装 `Microsoft.UI.Xaml.2.8 8.2511.26001.0 (x64)` 框架包（`Get-AppxPackage Microsoft.UI.Xaml*`）。
 - 但探针是**未打包 Win32 进程**，无 MSIX 包标识/框架包依赖图，WinRT 激活无法解析框架包内可激活类 → `REGDB_E_CLASSNOTREG`。
 - 输出目录仅有 `Microsoft.UI.Xaml.Projection.dll`，无原生 `Microsoft.UI.Xaml.dll`。
-- 未采用 MSIX 打包/声明框架包依赖等手段绕过；因此“WinUI 2 内容自身透明”无法判定。
-- 结论：**宿主层透明仍成立（true 透出绿底/壁纸，false 白底；WorkerW SetParent 成功 lastErr=0），但 WinUI 2 内容从未渲染；这不是透明失败。**
+- 该阶段未采用 MSIX 打包/声明框架包依赖等手段绕过（为保住“未打包宿主 + WinUI 2”单变量前提）；因此“WinUI 2 内容自身透明”在**未打包前提**下无法判定。
+- 结论（阶段 4）：**宿主层透明仍成立（true 透出绿底/壁纸，false 白底；WorkerW SetParent 成功 lastErr=0），但 WinUI 2 内容从未渲染；这不是透明失败。** 该结论已被阶段 5 的 MSIX 复测取代。
+
+---
+
+## 阶段 5：MSIX 打包路线（WinUI 2 正式承载）
+
+### 联网文献要点（完整引用见 VERIFICATION.md 5.1）
+
+- Microsoft Learn《Host UWP XAML controls in desktop apps》明确：XAML 岛承载 WinUI for UWP Library 是**有条件**的——用 MSIX 部署时可用正式版 `Microsoft.UI.Xaml` NuGet；未打包时只能用预发行版 NuGet 或 Dynamic Dependencies API。
+- Microsoft Learn《MSIX framework packages and dynamic dependencies》明确：进程包图提供 “run-time class declarations”；打包应用的包图由清单 `PackageDependency` 初始化，**未打包应用的包图为空**。
+- Microsoft Learn《Use the dynamic dependency API…》明确：动态依赖成功后 “the app might activate classes and use content from the MSIX package”。
+- 推断：未打包进程包图为空 → WinRT 找不到 `Microsoft.UI.Xaml.*` 的可激活类 → `REGDB_E_CLASSNOTREG`；MSIX 声明框架包依赖后类注册可见 → 不再报错。文档未逐字给出该 HRESULT 因果句。
+- 本机旁证：框架包 `Microsoft.UI.Xaml.2.8 8.2511.26001.0` 清单内有 `windows.activatableClass.inProcessServer` + `Microsoft.UI.Xaml.dll`，注册 `NavigationView`、`XamlControlsResources` 等；NuGet 2.8.7 不含原生 DLL。
+
+### 实现与安装
+
+- 新增 `src/WinUI2Probe/Package.appxmanifest`：`Windows.FullTrustApplication` + `runFullTrust` + `PackageDependency Microsoft.UI.Xaml.2.8`。
+- 新增 `scripts/package-msix.ps1`：MSBuild → 组装布局 → 生成 logo → `makeappx` → 自签名 `signtool` → 安装/松注 → `artifacts/msix-install-status.txt`。
+- `run-probe.ps1` 新增 `-Packaged`（`IApplicationActivationManager` 按 AUMID 启动）与 `-Content winui2|grid`；workerw 模式在启动前额外截取**无遮挡桌面基准图**。
+
+### 结果
+
+- 签名 MSIX 安装失败：`0x800B0109`；本会话非管理员，无法把自签名证书放入 `LocalMachine\TrustedPeople`。回退开发者模式 `Add-AppxPackage -Register` 成功，身份 `WinUI2Probe_1.0.0.0_x64__rdz54j04exa60`。
+- 包标识下 `XamlControlsResources` / `NavigationView` / `InfoBar` 全部创建成功，`0x80040154` 消失；InfoBar 像素 `RGB(255,244,206)` 证明真实渲染。
+- 透明：topmost/workerw × 开/关 4 组 + `grid` 对照。岛级透明成立（对照严格等于绿/壁纸）；`NavigationView` 模板自带 `NavigationViewContentBackground=#80FFFFFF`，画面为 50% 白叠底（`128,255,128`；workerw `246,234,232`），属控件内容层而非透明失效。
+- `SetParent` 到 `Progman` 子 WorkerW 在打包上下文下无新限制（`lastErr=0`），壁纸采样与桌面基准一致。
+
+### 证据文件
+
+- `artifacts/WinUI2Probe-topmost-on-20261108-143135.log`（激活/渲染/资源诊断）
+- `artifacts/WinUI2Probe-topmost-off-20261108-143146.log`
+- `artifacts/WinUI2Probe-workerw-on-20261108-143452.log` / `workerw-off-20261108-143517.log`
+- `artifacts/WinUI2Probe-workerw-on-20261108-143532.log`（grid 对照）及同名 `-desktop.png`
+- `artifacts/msix-install-status.txt` / `artifacts/msix/package.log`（后者为临时目录，git 忽略）

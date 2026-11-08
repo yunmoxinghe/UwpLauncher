@@ -1,0 +1,45 @@
+﻿[14:35:02.263] === WinUI2Probe ===
+[14:35:02.285] pid=2312 os=Microsoft Windows NT 10.0.26300.0
+[14:35:02.287] RoInitialize(STA) => hr=0x00000001
+[14:35:02.440] [PKG] Package.Current fullName=WinUI2Probe_1.0.0.0_x64__rdz54j04exa60 family=WinUI2Probe_rdz54j04exa60
+[14:35:02.573] mode=workerw content=winui2 transparent=True hold=5000 captureAt=2500
+[14:35:02.809] WindowsXamlManager.InitializeForCurrentThread => True
+[14:35:02.842] Window.Current => Windows.UI.Xaml.Window
+[14:35:02.856] CoreWindow.GetForCurrentThread => Windows.UI.Core.CoreWindow
+[14:35:02.868] [CoreWindowInterop] hwnd=0x6D05D8
+[14:35:03.103] [WINUI2] XamlControlsResources merged into Application.Resources
+[14:35:03.177] [WINUI2] resource NavigationViewContentBackground => SolidColorBrush color=#80FFFFFF opacity=1
+[14:35:03.196] [WINUI2] resource NavigationViewDefaultBackground lookup failed: COMException
+[14:35:03.197] [WINUI2] resource ApplicationPageBackgroundThemeBrush => SolidColorBrush color=#FFF3F3F3 opacity=1
+[14:35:03.205] [RegisterClass] backdrop atom=49932 lastErr=0
+[14:35:03.229] [CreateWindow] backdrop hwnd=0x4800F2 lastErr=0
+[14:35:03.231] [RegisterClass] host atom=49927 lastErr=0
+[14:35:03.233] [CreateWindow] host hwnd=0x540912 exStyle=0x200080 lastErr=0
+[14:35:03.300] [DWS] created=True
+[14:35:03.322] [DWS] AttachToWindow(host) => 0x00000000
+[14:35:03.323] [DWS] island hwnd=0x3208A0
+[14:35:03.349] [WINUI2] new NavigationView() OK, type=Microsoft.UI.Xaml.Controls.NavigationView
+[14:35:03.444] [WINUI2] InfoBar created, severity=Warning
+[14:35:03.547] [WINUI2] NavigationView.Content set (WinUI 2 control as island root)
+[14:35:03.553] [DWS] Content set
+[14:35:03.555] [DWS] island sized to 520x380
+[14:35:03.559] [XST] set_IsBackgroundTransparent(True) => hr=0x00000000 readback=True
+[14:35:03.560] host dpi=144 coreHwnd=0x6D05D8 xamlHwnd=0x3208A0
+[14:35:03.562] [WORKERW] Progman=0x1015C
+[14:35:03.563] [WORKERW] SendMessage(Progman, 0x052C, 0, 0) => 0x0
+[14:35:03.569] [WORKERW] Progman child WorkerW=0x4E0742 valid=True visible=True
+[14:35:03.582] [REPARENT] hwnd=0x4800F2 oldParent=0x1000C newParent=0x4E0742 style=0x54000000 exStyle=0x8000080 lastErr=0
+[14:35:03.585] [REPARENT] hwnd=0x540912 oldParent=0x1000C newParent=0x4E0742 style=0x44000000 exStyle=0x200080 lastErr=0
+[14:35:03.588] [WORKERW] parent=0x4E0742 hostIsChild=True backdropIsChild=True
+[14:35:03.592] [SHOW] hostVisible=True xamlVisible=True backdropVisible=True
+[14:35:03.593] [RECT] host screen=(60,60,580,440)
+[14:35:03.594] [RECT] island screen=(60,60,580,440) root=0x1015C
+[14:35:06.113] [SAMPLE] dpi=144 hostRect=(60,60,520x380) backdrop=(20,20,600x460)
+[14:35:06.126] [SAMPLE] transparent_left (190,269) COLORREF=0x00E8EAF6 RGB=(246,234,232)
+[14:35:06.142] [SAMPLE] semi_red_right (450,269) COLORREF=0x007472F1 RGB=(241,114,116)
+[14:35:06.158] [SAMPLE] host_top_left (65,65) COLORREF=0x00E4DFCD RGB=(205,223,228)
+[14:35:06.175] [SAMPLE] backdrop_outside (30,30) COLORREF=0x00C7BB97 RGB=(151,187,199)
+[14:35:06.191] [SAMPLE] desktop_reference (10,700) COLORREF=0x00BCC2E1 RGB=(225,194,188)
+[14:35:06.208] [SAMPLE] winui2_infobar (480,90) COLORREF=0x00CEF4FF RGB=(255,244,206)
+[14:35:08.748] [CLEANUP] DesktopWindowXamlSource disposed
+[14:35:08.753] [CLEANUP] windows destroyed

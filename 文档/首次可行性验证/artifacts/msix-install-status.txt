@@ -1,0 +1,12 @@
+﻿mode=loose-register
+signedInstallError=Deployment failed with HRESULT: 0x800B0109, 已处理证书链，但是在不受信任提供程序信任的根证书中终止。
+
+错误 0x800B0109: 应用包或捆绑包中的签名的根证书必须是受信任的证书。
+
+NOTE: For additional information, look for [ActivityId] 5507df3d-6eec-0001-3d81-bd55ec6edd01 in the Event Log or use the command line Get-AppPackageLog -ActivityID 5507df3d-6eec-0001-3d81-bd55ec6edd01
+
+packageFullName=WinUI2Probe_1.0.0.0_x64__rdz54j04exa60
+packageFamilyName=WinUI2Probe_rdz54j04exa60
+aumid=WinUI2Probe_rdz54j04exa60!App
+msix=artifacts/msix/WinUI2Probe_1.0.0.0_x64.msix
+packageLog=artifacts/msix/package.log

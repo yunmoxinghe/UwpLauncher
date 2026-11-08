@@ -9,7 +9,8 @@
 1. DesktopFlyouts 的 UWP 透明**不靠 DWM/分层窗口**，而是用 `Window.Current` 上未进入常规 SDK 投影的 WinRT 接口 `IXamlSourceTransparency`（IID `06636C29-5A17-458D-8EA2-2422D997A922`，内部即 `IWindowPrivate`）设置 `IsBackgroundTransparent = true`，配合 `WS_EX_NOREDIRECTIONBITMAP` 宿主窗口。
 2. 本机最小工程实测：**透明成立**。`true` 时岛背景完全透出后方纯绿对照窗，`false` 时为不透明白底。
 3. 嵌入桌面：DesktopFlyouts 原方案（置顶透明浮层）透明成立；额外用 `SetParent` 挂到 `Progman` 的子 `WorkerW` 后，**透明仍然成立**（左半透出壁纸，右半为 50% 红与壁纸混色）。
-4. WinUI 2 对照：**宿主层透明仍成立，但 WinUI 2 内容未渲染**。`Microsoft.UI.Xaml.Controls.NavigationView` 在未打包进程中激活失败（`0x80040154 REGDB_E_CLASSNOTREG`），岛内容未设置；该结果不是透明失败，WinUI 2 内容透明度无法判定（详见第 4 节）。
+4. WinUI 2 对照：**未打包进程激活失败（`0x80040154`），MSIX 打包后激活与渲染成立**。第 4 节记录的 `REGDB_E_CLASSNOTREG` 属“未打包前提”的阶段结论；按正式路线改为 MSIX（声明 `Microsoft.UI.Xaml.2.8` 框架包依赖）后，`XamlControlsResources`、`NavigationView`、`InfoBar` 均正常创建与渲染（详见第 5 节）。
+5. MSIX 打包后的透明复测：**岛级透明开关仍成立**（对照内容严格复现纯绿/壁纸透出），但以 `NavigationView` 为根时，其内容区模板自带 `#80FFFFFF`（50% 白）背景，画面是“50% 白 + 背景”的混色，不是纯壁纸色；这属于控件内容层，不是透明失效（详见 5.4）。
 
 ---
 
@@ -189,7 +190,7 @@ Progman 0x1015C (visible)
 
 **内容构造**：先合并 `Microsoft.UI.Xaml.Controls.XamlControlsResources`，再 `new Microsoft.UI.Xaml.Controls.NavigationView()`，把与阶段 2 相同的左右两列采样布局设为其 `Content`（左列全透明，右列 50% 红）。失败时不设置任何替代内容，岛保持为空，采样照常执行。
 
-### 4.1 实测：WinUI 2 内容激活失败
+### 4.1 实测（未打包前提）：WinUI 2 内容激活失败
 
 | 步骤 | 实测结果 |
 |---|---|
@@ -210,20 +211,136 @@ Progman 0x1015C (visible)
 
 **结论**：
 - **宿主层透明仍然成立**：同一宿主、同一 `IsBackgroundTransparent` 设置在 `true` 时透出绿底/壁纸，`false` 时变白；WorkerW 挂载 `SetParent` 成功（`lastErr=0`、`hostIsChild=True`）。
-- **WinUI 2 内容从未渲染**：右半始终没有出现任何红色区域，因此“WinUI 2 内容自身的透明是否成立”**无法作答**。这**不是透明失败**，而是 WinUI 2 控件在未打包进程中无法激活；不能把空岛透出背景当作 WinUI 2 透明成功。
+- **WinUI 2 内容从未渲染**：右半始终没有出现任何红色区域，因此“WinUI 2 内容自身的透明是否成立”在**未打包前提**下无法作答。这**不是透明失败**，而是 WinUI 2 控件在未打包进程中无法激活；不能把空岛透出背景当作 WinUI 2 透明成功。
+- **阶段性结论**：以上是未打包路线的结论；MSIX 打包后已在第 5 节复测，激活失败被消除，透明与渲染结论以第 5 节为准。
 
 ### 4.3 失败根因（基于实测证据）
 
 - 本机**已安装** WinUI 2 框架包 `Microsoft.UI.Xaml.2.8 8.2511.26001.0 (x64)`，但本工程是**未打包 Win32 进程**，没有 MSIX 包标识与框架包依赖图，WinRT 激活无法解析该框架包内的可激活类 → `REGDB_E_CLASSNOTREG (0x80040154)`。
 - 输出目录只有 `Microsoft.UI.Xaml.Projection.dll`，没有原生 `Microsoft.UI.Xaml.dll`（NuGet 不负责部署框架包）。
-- 要让 WinUI 2 内容真正进入这个岛，需将宿主改为 MSIX 打包并对 `Microsoft.UI.Xaml.2.8` 声明依赖（属另一种承载方式）。本次**未采用**，以免用打包手段绕开"未打包宿主 + WinUI 2"这一前提本身不成立的事实。
+- 要让 WinUI 2 内容真正进入这个岛，需将宿主改为 MSIX 打包并对 `Microsoft.UI.Xaml.2.8` 声明依赖。本轮最初为保住“未打包宿主 + WinUI 2”这一单变量前提**未采用**；随后按确认的正式路线改为 MSIX，结果见第 5 节。
 - 附带事实：`NavigationView` 与 `Windows.UI.Xaml.UIElement` 的类型兼容性在编译期已验证通过，因此失败点不是类型系统，而是 WinRT 激活。
 
 **证据文件**：`artifacts/WinUI2Probe-topmost-on-20261108-135302.log`、`WinUI2Probe-topmost-off-20261108-135332.log`、`WinUI2Probe-workerw-on-20261108-135357.log`、`WinUI2Probe-workerw-off-20261108-135412.log` 及同名 `.png`。
 
 ---
 
-## 5. 复现方式
+## 5. MSIX 打包后复测（正式路线）
+
+> 第 4 节的“WinUI 2 内容无法渲染”是**未打包前提**下的阶段性结论，不是最终结论。本节按正式路线把 `WinUI2Probe` 改成 MSIX 打包应用（声明 `Microsoft.UI.Xaml.2.8` 框架包依赖），在包标识上下文中重做激活与透明验证。
+
+### 5.1 未打包为什么报 0x80040154：官方文档与本机旁证
+
+**文档明确说明的部分**
+
+- UWP XAML Islands 对 WinUI for UWP Library（WinUI 2）的支持是**有条件的**：
+
+  > “Hosting controls from the WinUI for UWP Library in a XAML Island is supported conditionally in the current release of UWP XAML Islands. If your desktop app uses an MSIX package for deployment, you can host WinUI controls from prerelease or release versions of the Microsoft.UI.Xaml NuGet package. If your desktop app is not packaged using MSIX, you can host WinUI controls only if you install a prerelease version of the Microsoft.UI.Xaml NuGet package, or if you use the Dynamic Dependencies API.”
+
+  出处：Microsoft Learn，*Host UWP XAML controls in desktop apps (UWP XAML Islands)* → “Limitations and workarounds”，<https://learn.microsoft.com/en-us/windows/uwp/xaml-islands/xaml-islands>
+
+- 进程的**包图（package graph）**决定它能使用哪些包内组件：
+
+  > “every process has a package graph … This graph allows the app to load DLLs, content, and run-time class declarations provided by a referenced package.”
+
+  同一文档说明：打包应用的包图按清单中的 `PackageDependency` 在进程创建时初始化；**未打包应用的包图为空**，只能走标准 DLL 搜索顺序，无法访问框架包。
+  出处：Microsoft Learn，*MSIX framework packages and dynamic dependencies*，<https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/framework-packages/framework-packages-overview>
+
+- 动态依赖 API 的用途明确包含“激活类”：
+
+  > “If successful, the app might activate classes and use content from the MSIX package.”
+
+  出处：Microsoft Learn，*Use the dynamic dependency API to reference MSIX packages at run time*，<https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/framework-packages/use-the-dynamic-dependency-api>
+
+**本机旁证（事实）**
+
+- WinUI 2 以 **MSIX 框架包**分发：本机已安装 `Microsoft.UI.Xaml.2.8` `8.2511.26001.0 (x64)`。
+- 框架包 `AppxManifest.xml` 用 `windows.activatableClass.inProcessServer` + `Microsoft.UI.Xaml.dll` 注册实现类，例如：
+
+  ```xml
+  <Path>Microsoft.UI.Xaml.dll</Path>
+  <ActivatableClass ActivatableClassId="Microsoft.UI.Xaml.Controls.NavigationView" ThreadingModel="both" />
+  <ActivatableClass ActivatableClassId="Microsoft.UI.Xaml.Controls.XamlControlsResources" ThreadingModel="both" />
+  ```
+
+- NuGet 包 `Microsoft.UI.Xaml 2.8.7` **不含**原生 `Microsoft.UI.Xaml.dll`：`build/Microsoft.UI.Xaml.props` 只提供 `AppxPackageRegistration`（`Microsoft.UI.Xaml.2.8.appx`，按架构）与 `lib` 下的投影 DLL / `Microsoft.UI.Xaml.winmd` / PRI；构建输出仅出现 `Microsoft.UI.Xaml.Projection.dll`，与第 4 节观察一致。
+
+**推断（非文档逐字表述）**
+
+- 未打包进程对 `Microsoft.UI.Xaml.*` 做 WinRT 激活时，可激活类注册来自“进程包图中的框架包”；包图为空 → 查不到类 → `REGDB_E_CLASSNOTREG (0x80040154)`。官方文档没有逐字写出这个 HRESULT 与该因果链，但“包图提供 run-time class declarations”“未打包包图为空”“动态依赖成功后才能 activate classes”三处文档 + 本机 HRESULT 共同支持该结论。
+- MSIX 打包解决的原因：清单声明 `<PackageDependency Name="Microsoft.UI.Xaml.2.8" … />`，安装后进程启动时该框架包进入包图，其可激活类对 WinRT 可见，因此同一份代码不再报 `0x80040154`（5.3 实测）。直接因果句仍是推断，机制要素为文档明确。
+
+**替代方案（文档明确，本次未采用）**：不打包时可用 Dynamic Dependencies API 运行时把框架包加入包图；Windows App SDK 的 DDLM 只为其自身框架包提供生命周期管理器，文档说明 “no other framework packages currently provide a similar lifetime manager component from Microsoft”（<https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/deployment-architecture>）。按用户确认的前提，本轮走 MSIX。
+
+### 5.2 打包实现与安装（全自动）
+
+- 清单：[Package.appxmanifest](src/WinUI2Probe/Package.appxmanifest)
+  - `Identity Name="WinUI2Probe" Publisher="CN=WinUI2ProbeDev" Version="1.0.0.0" ProcessorArchitecture="x64"`
+  - `TargetDeviceFamily Name="Windows.Desktop"`
+  - `<PackageDependency Name="Microsoft.UI.Xaml.2.8" MinVersion="8.2501.31001.0" Publisher="CN=Microsoft Corporation, …" />`
+  - `Application Executable="WinUI2Probe.exe" EntryPoint="Windows.FullTrustApplication"` + `runFullTrust`
+- 脚本：[package-msix.ps1](scripts/package-msix.ps1)：构建 → 组装布局 → 生成 logo → `makeappx pack` → `signtool sign` → 安装/注册 → 写 [msix-install-status.txt](artifacts/msix-install-status.txt)。
+- 启动：[run-probe.ps1](scripts/run-probe.ps1) 的 `-Packaged` 通过 `IApplicationActivationManager::ActivateApplication` 按 AUMID 启动并传参，随后自动截图；**无手动点击**。
+- 安装结果：
+  - 签名 MSIX 安装：**失败** `0x800B0109`（“应用包或捆绑包中的签名的根证书必须是受信任的证书”）。本会话**非管理员**，无法把自签名证书导入 `LocalMachine\TrustedPeople`；仅导入 `CurrentUser\TrustedPeople` 不足以让 `Add-AppxPackage` 信任包签名。
+  - 回退：开发者模式（`AllowDevelopmentWithoutDevLicense=1`）下 `Add-AppxPackage -Register artifacts/msix/layout/AppxManifest.xml` **成功**，得到 `PackageFullName=WinUI2Probe_1.0.0.0_x64__rdz54j04exa60`、`AUMID=WinUI2Probe_rdz54j04exa60!App`。
+  - 说明：松散注册使用**同一份 AppxManifest 与同一框架包依赖**，包标识、包图与依赖解析真实生效；未验证的仅是“已签名包 + 证书信任”这一安装通道。
+
+### 5.3 WinUI 2 控件激活与渲染（包标识下）
+
+`artifacts/WinUI2Probe-topmost-on-20261108-143135.log` 关键行：
+
+```text
+[PKG] Package.Current fullName=WinUI2Probe_1.0.0.0_x64__rdz54j04exa60 family=WinUI2Probe_rdz54j04exa60
+[WINUI2] XamlControlsResources merged into Application.Resources
+[WINUI2] resource NavigationViewContentBackground => SolidColorBrush color=#80FFFFFF opacity=1
+[WINUI2] new NavigationView() OK, type=Microsoft.UI.Xaml.Controls.NavigationView
+[WINUI2] InfoBar created, severity=Warning
+[WINUI2] NavigationView.Content set (WinUI 2 control as island root)
+[SAMPLE] winui2_infobar (480,90) COLORREF=0x00CEF4FF RGB=(255,244,206)
+```
+
+- `0x80040154` 不再出现；`XamlControlsResources`、`NavigationView`、`InfoBar` 全部创建成功。
+- InfoBar 右上留白像素 `RGB(255,244,206)` = `#FFF4CE`（WinUI 2 Warning 语义背景），证明内容不是空岛，确实由 `Microsoft.UI.Xaml` 渲染。
+
+### 5.4 透明复测（2 模式 × 开关 + 内容对照）
+
+主实验：岛根为 `NavigationView`（`Background=Transparent`），内容是顶部 `InfoBar` + 原两列判据布局。
+对照诊断：同一打包上下文改用 `--content grid`（原判据布局、无 WinUI 2 控件），用于区分“岛级透明”与“控件自带底色”。
+
+| 内容 | 模式 | `transparent` | 左半 (190,269) | 右半 50% 红 (450,269) | InfoBar (480,90) |
+|---|---|---|---|---|---|
+| WinUI 2 | topmost | `1` | **RGB(128,255,128)** | **RGB(192,127,64)** | RGB(255,244,206) |
+| WinUI 2 | topmost | `0` | RGB(255,255,255) | RGB(255,127,127) | RGB(255,244,206) |
+| WinUI 2 | workerw | `1` | **RGB(246,234,232)** | **RGB(241,114,116)** | RGB(255,244,206) |
+| WinUI 2 | workerw | `0` | RGB(255,255,255) | RGB(255,127,127) | RGB(255,244,206) |
+| grid 对照 | topmost | `1` | **RGB(0,255,0)** | **RGB(128,127,0)** | — |
+| grid 对照 | workerw | `1` | **RGB(237,213,209)** | **RGB(226,101,104)** | — |
+
+判据与验算：
+
+- **岛级透明仍然成立**。`grid` 对照在包标识下严格复现阶段 2/3：topmost 左 = 纯绿；WorkerW 左 = 启动前桌面基准图同点壁纸色 `RGB(237,213,209)`，右 = `50% 红 + 壁纸`（`226 ≈ 255/2 + 196/2`、`101 ≈ 203/2`、`104 ≈ 209/2`，误差 ≤1）。
+- **WinUI 2 内容真实渲染**（5.3）。
+- 以 `NavigationView` 为根时不是纯背景色：其内容区背景资源 `NavigationViewContentBackground = #80FFFFFF`（5.3 日志），即控件模板自带的 **50% 白**层。混色验算：
+  - topmost `1`：`(128,255,128) ≈ 0.5×255 + 0.5×(0,255,0)`；右 `(192,127,64) ≈ 0.5×(255,0,0) + 0.5×(128,255,128)`。
+  - workerw `1`：桌面基准 `(237,213,209)` 叠 50% 白预测 `(246,234,232)`，实测**逐通道一致**；右预测 `≈(240,114,116)`，实测 `(241,114,116)`。
+  - `0` 时两模式均为不透明白底，右半为 50% 红叠白，与阶段 2 一致。
+- 因此：**透明开关生效**（绿底/壁纸确实透出），但**不能声称“WinUI 2 内容完全透明”**——`NavigationView` 模板的 `#80FFFFFF` 内容底色是控件行为，不是透明失效。若需纯透明观感，需在内容侧把该模板背景改为透明（属内容设计，本轮未改，以免用改主题资源的方式制造“全透明”结论）。
+
+### 5.5 打包上下文下的 SetParent（如实记录）
+
+无新限制或行为差异：`SetParent` 到 `Progman` 子 `WorkerW` 成功（`lastErr=0`）、`hostIsChild=True`；壁纸采样与启动前桌面基准图同点一致。与未打包时相同的既有差异仍是“普通 GDI 绿色对照窗不参与 WorkerW 合成”（3.5），故本轮同样用**桌面基准 + 混色算式**，不依赖绿窗观察。
+
+### 5.6 本轮限制与剩余待验证项
+
+- **签名 MSIX 正式安装未完成**：需要管理员把证书放入 `LocalMachine\TrustedPeople`（或用受信任证书/商店签名）。本轮已记录 `0x800B0109`，并以开发模式松散注册完成包标识验证。
+- 未测试 Dynamic Dependencies API 替代路径（WinUI 2 无 DDLM，需 Windows 11 22H2+ 的 `AddPackageDependency`）。
+- 未改动 `NavigationViewContentBackground`，因此“WinUI 2 内容完全透明”的观感未验证；本轮只判定透明开关语义与控件渲染。
+- 打包后仍以 `DesktopWindowXamlSource` + `WS_EX_NOREDIRECTIONBITMAP` 宿主；未测试在其他宿主形态（如 WPF/WinForms 岛）中的同样组合。
+
+---
+
+## 6. 复现方式
 
 ```powershell
 # 1) 构建
@@ -249,13 +366,27 @@ powershell -ExecutionPolicy Bypass -File `
 powershell -ExecutionPolicy Bypass -File `
   "文档/首次可行性验证/scripts/run-probe.ps1" `
   -Probe WinUI2Probe -Mode workerw -Transparent on
+
+# 3) WinUI2Probe 打包成 MSIX 并安装（签名失败时自动回退开发模式注册）
+powershell -ExecutionPolicy Bypass -File `
+  "文档/首次可行性验证/scripts/package-msix.ps1"
+
+# 4) 以包身份运行（自动激活、传参、截图）
+powershell -ExecutionPolicy Bypass -File `
+  "文档/首次可行性验证/scripts/run-probe.ps1" `
+  -Probe WinUI2Probe -Mode topmost -Transparent on -Packaged
+
+# 4b) 对照诊断：同一包身份，岛内容退回原判据布局
+powershell -ExecutionPolicy Bypass -File `
+  "文档/首次可行性验证/scripts/run-probe.ps1" `
+  -Probe WinUI2Probe -Mode topmost -Transparent on -Content grid -Packaged
 ```
 
-探针参数：`--mode topmost|plain|workerw`、`--transparent 1|0`、`--log <path>`、`--hold <ms>`、`--capture <ms>`。
+探针参数：`--mode topmost|plain|workerw`、`--content winui2|grid`、`--transparent 1|0`、`--log <path>`、`--hold <ms>`、`--capture <ms>`。`run-probe.ps1` 的 `-Packaged` 表示按已注册包的 AUMID 启动，而不是直接执行 exe。
 
 ---
 
-## 6. 证据文件
+## 7. 证据文件
 
 | 文件 | 内容 |
 |---|---|
@@ -263,16 +394,20 @@ powershell -ExecutionPolicy Bypass -File `
 | `artifacts/workerw-on.log` | 第一次 WorkerW 失败（`ERROR_INVALID_PARAMETER 87`） |
 | `artifacts/workerw-on2.log` / `workerw-off2.log` | 修正后的 WorkerW 成功复测 |
 | `artifacts/*.png` | 4 组截图与 700x500 裁剪图 |
-| `artifacts/WinUI2Probe-*.log` / `*.png` | WinUI 2 对照实验 4 组（含 `0x80040154` 激活失败证据） |
+| `artifacts/WinUI2Probe-*.log` / `*.png` | WinUI 2 对照实验（未打包 4 组含 `0x80040154`；打包后 4 组 + `grid` 对照） |
+| `artifacts/WinUI2Probe-workerw-*-desktop.png` | WorkerW 模式启动前的无遮挡桌面基准图（透明判定用） |
+| [artifacts/msix-install-status.txt](artifacts/msix-install-status.txt) | 打包/安装结果：松散注册、包标识、签名失败原因 |
+| [src/WinUI2Probe/Package.appxmanifest](src/WinUI2Probe/Package.appxmanifest) | MSIX 清单（含 `Microsoft.UI.Xaml.2.8` 框架包依赖） |
+| [scripts/package-msix.ps1](scripts/package-msix.ps1) | 打包/签名/安装脚本 |
 | [LEDGER.md](LEDGER.md) | 分阶段台账（含环境、行号、失败与结论） |
 
 ---
 
-## 7. 局限与不确定项
+## 8. 局限与不确定项
 
 - 结果基于本机 Windows 11 Build 26300 / 150% DPI / 单屏 / 交互式会话；Win10 的 WorkerW 层级不同，WorkerW 部分需按当地窗口树重测。
 - 未使用任何 DWM 属性，且实测证明不需要；但未测试“有其他桌面工具（壁纸引擎、动态壁纸）同时挂 WorkerW”时的冲突。
 - 未验证输入/焦点/命中测试在 WorkerW 子窗中的行为（超出透明判据范围）。
 - `IsBackgroundTransparent` 按官方文档对**当前线程所有** `DesktopWindowXamlSource` 生效；工程中每个进程只有一个岛，未做多岛对照。
 - WorkerW 中普通 GDI 子窗不参与合成的原因只做了现象级定位（DComp 内容可见、GDI 内容不可见），未进一步下钻 DWM/桌面合成内部实现。
-- WinUI 2 对照实验只证明了"未打包宿主无法激活 WinUI 2 控件"；未验证 MSIX 打包 + 框架包依赖场景下 WinUI 2 内容能否成立（该场景属另一实验，本次有意未做）。
+- WinUI 2 对照实验最初只证明了"未打包宿主无法激活 WinUI 2 控件"；MSIX 打包后已补充验证激活与渲染（第 5 节）。仍未验证的是**已签名 MSIX 的正式安装通道**（受管理员/证书信任限制），以及把 `NavigationViewContentBackground` 改为透明后的纯透明观感。

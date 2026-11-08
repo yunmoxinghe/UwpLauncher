@@ -1,0 +1,39 @@
+﻿[14:31:49.728] === WinUI2Probe ===
+[14:31:49.756] pid=19348 os=Microsoft Windows NT 10.0.26300.0
+[14:31:49.758] RoInitialize(STA) => hr=0x00000001
+[14:31:49.962] [PKG] Package.Current fullName=WinUI2Probe_1.0.0.0_x64__rdz54j04exa60 family=WinUI2Probe_rdz54j04exa60
+[14:31:50.229] mode=topmost content=winui2 transparent=False hold=5000 captureAt=2500
+[14:31:50.587] WindowsXamlManager.InitializeForCurrentThread => True
+[14:31:50.596] Window.Current => Windows.UI.Xaml.Window
+[14:31:50.602] CoreWindow.GetForCurrentThread => Windows.UI.Core.CoreWindow
+[14:31:50.626] [CoreWindowInterop] hwnd=0x4E0912
+[14:31:50.884] [WINUI2] XamlControlsResources merged into Application.Resources
+[14:31:50.965] [WINUI2] resource NavigationViewContentBackground => SolidColorBrush color=#80FFFFFF opacity=1
+[14:31:50.989] [WINUI2] resource NavigationViewDefaultBackground lookup failed: COMException
+[14:31:50.989] [WINUI2] resource ApplicationPageBackgroundThemeBrush => SolidColorBrush color=#FFF3F3F3 opacity=1
+[14:31:50.999] [RegisterClass] backdrop atom=49934 lastErr=0
+[14:31:51.035] [CreateWindow] backdrop hwnd=0x210852 lastErr=0
+[14:31:51.037] [RegisterClass] host atom=49781 lastErr=0
+[14:31:51.043] [CreateWindow] host hwnd=0x120094 exStyle=0x200088 lastErr=0
+[14:31:51.100] [DWS] created=True
+[14:31:51.128] [DWS] AttachToWindow(host) => 0x00000000
+[14:31:51.128] [DWS] island hwnd=0x270B56
+[14:31:51.150] [WINUI2] new NavigationView() OK, type=Microsoft.UI.Xaml.Controls.NavigationView
+[14:31:51.237] [WINUI2] InfoBar created, severity=Warning
+[14:31:51.349] [WINUI2] NavigationView.Content set (WinUI 2 control as island root)
+[14:31:51.357] [DWS] Content set
+[14:31:51.360] [DWS] island sized to 520x380
+[14:31:51.370] [XST] set_IsBackgroundTransparent(False) => hr=0x00000000 readback=False
+[14:31:51.370] host dpi=144 coreHwnd=0x4E0912 xamlHwnd=0x270B56
+[14:31:51.379] [SHOW] hostVisible=True xamlVisible=True backdropVisible=True
+[14:31:51.381] [RECT] host screen=(60,60,580,440)
+[14:31:51.382] [RECT] island screen=(60,60,580,440) root=0x120094
+[14:31:53.893] [SAMPLE] dpi=144 hostRect=(60,60,520x380) backdrop=(20,20,600x460)
+[14:31:53.922] [SAMPLE] transparent_left (190,269) COLORREF=0x00FFFFFF RGB=(255,255,255)
+[14:31:53.936] [SAMPLE] semi_red_right (450,269) COLORREF=0x007F7FFF RGB=(255,127,127)
+[14:31:53.954] [SAMPLE] host_top_left (65,65) COLORREF=0x00FFFFFF RGB=(255,255,255)
+[14:31:53.968] [SAMPLE] backdrop_outside (30,30) COLORREF=0x0000FF00 RGB=(0,255,0)
+[14:31:53.987] [SAMPLE] desktop_reference (10,700) COLORREF=0x00F5F5F5 RGB=(245,245,245)
+[14:31:54.003] [SAMPLE] winui2_infobar (480,90) COLORREF=0x00CEF4FF RGB=(255,244,206)
+[14:31:56.579] [CLEANUP] DesktopWindowXamlSource disposed
+[14:31:56.590] [CLEANUP] windows destroyed

@@ -2,6 +2,9 @@
 **/bin/
 **/obj/
 
+# MSIX 打包临时目录（布局、签名私钥、证书、msix 不进入仓库）
+文档/首次可行性验证/artifacts/msix/
+
 # Visual Studio 缓存与用户文件
 .vs/
 *.user

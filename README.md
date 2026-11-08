@@ -2,7 +2,7 @@
 
 UWP XAML 岛透明背景的可行性验证工程，也是后续桌面启动器方向的实验底座。
 
-本仓库针对 [DesktopFlyouts](https://github.com/0x5bfa/DesktopFlyouts) 的 UWP 版 XAML Island 透明实现做了源码考据，并在本机从零搭建最小宿主工程复现、实测，随后额外验证了把该岛挂到桌面 `WorkerW` 层后透明是否仍然成立。另含一个 WinUI 2 对照实验（`Microsoft.UI.Xaml 2.x` 控件作为岛内容）。结论以实际运行的像素采样与日志为准，不以静态阅读代码代替验证。
+本仓库针对 [DesktopFlyouts](https://github.com/0x5bfa/DesktopFlyouts) 的 UWP 版 XAML Island 透明实现做了源码考据，并在本机从零搭建最小宿主工程复现、实测，随后额外验证了把该岛挂到桌面 `WorkerW` 层后透明是否仍然成立。另含一个 WinUI 2 对照实验（`Microsoft.UI.Xaml 2.x` 控件作为岛内容），并按正式路线把它改为 MSIX 打包应用（声明 `Microsoft.UI.Xaml.2.8` 框架包依赖）后复测。结论以实际运行的像素采样与日志为准，不以静态阅读代码代替验证。
 
 ## 已验证结论
 
@@ -13,7 +13,9 @@ UWP XAML 岛透明背景的可行性验证工程，也是后续桌面启动器�
 
 **嵌入桌面阶段的局限**：上述 WorkerW 结论只代表本机 Windows 11 Build 26300、150% DPI、单个进程单个岛的观测；同一 WorkerW 层下普通 GDI 子窗口不参与桌面合成（只有 DComp/XAML 内容与系统壁纸可见），且该场景下的输入、焦点与命中测试行为未做验证，换机器或换系统版本需要按当地窗口树重测。
 
-**WinUI 2 对照实验**：同一宿主下把 `Microsoft.UI.Xaml.Controls.NavigationView` 作为岛内容时，WinUI 2 控件在未打包进程中激活失败（`0x80040154 REGDB_E_CLASSNOTREG`），岛内容始终未渲染；宿主层透明本身仍生效（`true` 透出绿底/壁纸、`false` 白底）。该结果只能证明未打包宿主无法承载 WinUI 2，**不能**据此判定 WinUI 2 内容的透明属性，详见报告第 4 节。
+**WinUI 2 对照实验**：同一宿主下把 `Microsoft.UI.Xaml.Controls.NavigationView` 作为岛内容时，未打包进程激活失败（`0x80040154 REGDB_E_CLASSNOTREG`）——这是阶段结论；改为 MSIX 打包（声明 `Microsoft.UI.Xaml.2.8` 框架包依赖、开发模式注册）后，`XamlControlsResources` / `NavigationView` / `InfoBar` 均正常创建并真实渲染。透明开关在包标识下仍生效（对照内容严格透出绿底/壁纸）；但 `NavigationView` 模板自带 `#80FFFFFF`（50% 白）内容底色，画面是“50% 白 + 背景”的混色，**不能**据此声称 WinUI 2 内容完全透明。详见报告第 4、5 节。
+
+> MSIX 说明：本机以开发模式 `Add-AppxPackage -Register` 完成注册（签名安装因非管理员无法信任自签名证书而失败，错误 `0x800B0109`，已记录）。包标识与框架包依赖解析真实生效。
 
 ## 目录结构
 
@@ -36,6 +38,7 @@ UWP XAML 岛透明背景的可行性验证工程，也是后续桌面启动器�
             │   ├── NativeMethods.txt/.json    # CsWin32 配置与所需 API 清单
             │   └── App.xaml(.cs), app.manifest
             └── WinUI2Probe/              # WinUI 2 对照工程（同样的宿主，内容改为 WinUI 2 控件）
+                ├── Package.appxmanifest  # MSIX 清单（Microsoft.UI.Xaml.2.8 框架包依赖）
 ```
 
 完整报告见 [文档/首次可行性验证/VERIFICATION.md](文档/首次可行性验证/VERIFICATION.md)。
@@ -68,9 +71,17 @@ powershell -ExecutionPolicy Bypass -File `
 powershell -ExecutionPolicy Bypass -File `
   "文档/首次可行性验证/scripts/run-probe.ps1" `
   -Probe WinUI2Probe -Mode topmost -Transparent on
+
+# 5) WinUI 2 的 MSIX 路线：打包 + 安装/注册，再以包身份运行
+powershell -ExecutionPolicy Bypass -File `
+  "文档/首次可行性验证/scripts/package-msix.ps1"
+
+powershell -ExecutionPolicy Bypass -File `
+  "文档/首次可行性验证/scripts/run-probe.ps1" `
+  -Probe WinUI2Probe -Mode topmost -Transparent on -Packaged
 ```
 
-探针参数：`-Probe IslandProbe|WinUI2Probe`、`--mode topmost|plain|workerw`、`--transparent 1|0`、`--log <path>`、`--hold <ms>`、`--capture <ms>`。
+探针参数：`-Probe IslandProbe|WinUI2Probe`、`--mode topmost|plain|workerw`、`--content winui2|grid`、`--transparent 1|0`、`--log <path>`、`--hold <ms>`、`--capture <ms>`；`run-probe.ps1 -Packaged` 表示按已注册 MSIX 包的 AUMID 启动。
 
 判定方式：探针在屏幕坐标固定采样点用 `GetPixel` 读取合成后的真实像素，同时脚本保存整屏截图；`topmost` 模式以纯绿对照窗为后方参照，`workerw` 模式以桌面壁纸为参照。
 
@@ -81,6 +92,7 @@ powershell -ExecutionPolicy Bypass -File `
 - .NET SDK 10
 - NuGet 依赖自动还原：`Microsoft.UI.Xaml 2.8.7`、`Microsoft.Windows.CsWinRT 2.2.0`、`Microsoft.Windows.CsWin32 0.3.275`
 - 走 UWP XAML Islands（`<UseUwp>true</UseUwp>`，非 WinUI 3）路径，需 VS 自带的 UWP XAML 编译目标
+- MSIX 路线另需：Windows SDK 的 `makeappx.exe`/`signtool.exe`、已安装 `Microsoft.UI.Xaml.2.8` 框架包、开启开发者模式（松散注册）
 
 ## 许可
 

@@ -140,13 +140,25 @@ if ($LASTEXITCODE -ne 0) { throw "makeappx 失败，exit=$LASTEXITCODE" }
 Write-PkgLog "packed $(Split-Path -Leaf $msix) size=$((Get-Item $msix).Length)"
 
 $subject = $CertSubject
-$cert = New-SelfSignedCertificate `
-    -Type Custom `
-    -Subject $subject `
-    -KeyUsage DigitalSignature `
-    -FriendlyName "$PackageName MSIX dev" `
-    -CertStoreLocation "Cert:\CurrentUser\My" `
-    -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3")
+# 复用同一张开发证书：每次构建都新建会导致"上次信任的证书对不上新包"（0x800B0109）。
+# 有效期不足 30 天才重建。
+$cert = Get-ChildItem Cert:\CurrentUser\My |
+    Where-Object { $_.Subject -eq $subject -and $_.HasPrivateKey -and $_.NotAfter -gt (Get-Date).AddDays(30) } |
+    Sort-Object NotAfter -Descending |
+    Select-Object -First 1
+if (-not $cert) {
+    Write-PkgLog "no reusable cert for $subject, creating new"
+    $cert = New-SelfSignedCertificate `
+        -Type Custom `
+        -Subject $subject `
+        -KeyUsage DigitalSignature `
+        -FriendlyName "$PackageName MSIX dev" `
+        -CertStoreLocation "Cert:\CurrentUser\My" `
+        -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3")
+}
+else {
+    Write-PkgLog "reuse cert thumbprint=$($cert.Thumbprint) notAfter=$($cert.NotAfter.ToString('yyyy-MM-dd'))"
+}
 $pfx = Join-Path $work "$certName.pfx"
 $cer = Join-Path $work "$certName.cer"
 $pwPlain = $certName
@@ -155,7 +167,7 @@ Export-PfxCertificate -Cert $cert -FilePath $pfx -Password $pw -Force | Out-Null
 Export-Certificate -Cert $cert -FilePath $cer -Force | Out-Null
 & $signtool sign /fd SHA256 /f $pfx /p $pwPlain $msix
 if ($LASTEXITCODE -ne 0) { throw "signtool 失败，exit=$LASTEXITCODE" }
-Write-PkgLog "signed with $subject"
+Write-PkgLog "signed with $subject thumbprint=$($cert.Thumbprint)"
 
 # 4) 安装 / 注册
 $pkgName = $PackageName

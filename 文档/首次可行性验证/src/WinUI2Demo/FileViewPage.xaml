@@ -24,7 +24,7 @@
                   AutomationProperties.AutomationId="FileList"
                   AutomationProperties.Name="文件网格"
                   Background="{x:Null}"
-                  Padding="0"
+                  Padding="{StaticResource ItemPagePadding}"
                   ItemContainerStyle="{StaticResource FileItemContainerStyle}"
                   ItemContainerTransitions="{x:Null}"
                   SelectionMode="Single"

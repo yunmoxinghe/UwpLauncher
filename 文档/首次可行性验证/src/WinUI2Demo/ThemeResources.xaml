@@ -56,6 +56,11 @@
     <x:Double x:Key="ItemMetaFontSize">12</x:Double>
     <!-- 文字区内边距对齐 Files 文字区 Margin="4,0,4,8"（GridLayoutPage.xaml:164） -->
     <Thickness x:Key="ItemPadding">4,6,4,8</Thickness>
+    <!-- 页内边距 8：Files FileList Padding="8"（GridLayoutPage.xaml:990） -->
+    <Thickness x:Key="ItemPagePadding">8</Thickness>
+    <x:Double x:Key="ItemPagePaddingSize">8</x:Double>
+    <!-- 副信息行高 = Caption 档 16（12 px 字号的标准行高） -->
+    <x:Double x:Key="ItemMetaLineHeight">16</x:Double>
     <!-- 4px 为用户明确要求（Files 的 LocalRegularItemContainerStyle 为 8，见 GridLayoutPage.xaml:915） -->
     <CornerRadius x:Key="ItemCornerRadius">4</CornerRadius>
 
@@ -75,6 +80,8 @@
     </Style>
     <Style x:Key="ItemMetaTextStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="{StaticResource ItemMetaFontSize}" />
+        <Setter Property="LineHeight" Value="{StaticResource ItemMetaLineHeight}" />
+        <Setter Property="LineStackingStrategy" Value="MaxHeight" />
         <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
     </Style>
@@ -88,6 +95,11 @@
         <Setter Property="MinHeight" Value="1" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <!-- 焦点视觉：上游把主体/次体厚度都设 0（GridLayoutPage.xaml:1005-1006）；
+             宿主 WS_EX_NOACTIVATE 不接收键盘焦点，这里显式对齐为 0，杜绝系统焦点框 -->
+        <Setter Property="UseSystemFocusVisuals" Value="False" />
+        <Setter Property="FocusVisualPrimaryThickness" Value="0" />
+        <Setter Property="FocusVisualSecondaryThickness" Value="0" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="GridViewItem">

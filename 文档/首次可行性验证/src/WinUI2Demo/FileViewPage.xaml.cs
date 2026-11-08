@@ -71,6 +71,7 @@ namespace WinUI2Demo
 
         private double _itemSlotWidth = 180;
         private double _itemSlotHeight = 104;
+        private double _pagePadding = 8;
         private int _pageSize = 12;
         private int _pageIndex;
 
@@ -141,6 +142,7 @@ namespace WinUI2Demo
             InitializeComponent();
             _itemSlotWidth = ResDouble("ItemSlotWidth", 180);
             _itemSlotHeight = ResDouble("ItemSlotHeight", 104);
+            _pagePadding = ResDouble("ItemPagePaddingSize", 8);
             _idleBrush = ResBrush("ItemIdleBrush");
             _hoverBrush = ResBrush("ItemHoverBrush");
             _pressedBrush = ResBrush("ItemPressedBrush");
@@ -336,8 +338,9 @@ namespace WinUI2Demo
         /// <summary>列数 = floor(可用宽度 / 槽宽)，行数 = floor(可用高度 / 槽高)，一页即一屏。</summary>
         private void UpdatePageMetrics()
         {
-            var width = FileList.ActualWidth;
-            var height = FileList.ActualHeight;
+            // ActualWidth/Height 含 Padding，先扣掉页边距再算列行，避免末列/末行被裁切
+            var width = FileList.ActualWidth - _pagePadding * 2;
+            var height = FileList.ActualHeight - _pagePadding * 2;
             if (width <= 0 || height <= 0)
                 return;
 

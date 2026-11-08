@@ -116,6 +116,9 @@
 | 状态切换动画 | 即时、无缓动（`generic.xaml` 模板） | 自绘即时切换 | 一致 |
 | 空闲底色 | `SubtleFillColorTransparent`（透明） | `#00FFFFFF` | 一致 |
 | 网格无滚动 | 上游允许滚动，我们按可用区域分页 | 滚动/滚动条全 Disabled | 产品形态 |
+| 页内边距 | 8（`GridPage:990`） | 0 → **8**（列行计算同步扣减 2×8） | 一致 |
+| 副信息行高 | Caption 档 16 | 未设 → **16** | 一致 |
+| 图标与文字间距 | 0：图标方格（180）与文字区紧邻，`Margin=12` 是图标方格内边距（`GridPage:106-110`） | 0（图标行 32 → 名称行紧邻） | 一致 |
 
 ### 2.2 偏离（有上游对应物，取值不同）
 
@@ -125,7 +128,6 @@
 | 项槽高 | 约 240–248（180 方格 + 60 名称区，`GridPage:99-210`） | 104 | 桌面嵌入形态：一屏要放 6 行 × 7 列；用户要求分页而非长列表 |
 | 主图标尺寸 | 96 / 128 / 256（`Layout:47-50`） | 32（字形 20） | 图标解码固定 `IconSizePx=32` 且带 LRU 缓存（`FileViewPage.xaml.cs`），改 96 会连带改解码尺寸、缓存上限与槽高；桌面瓦片用 32 更接近「叠加角标」规格（`GridPage:124-125`） |
 | 名称区高度 | 60（3 行） | 40（2 行） | 用户明确要求「名称两行省略」 |
-| GridView 外边距 | 8（`GridPage:990`） | 0 | 分页按 `floor(可用宽/槽宽)` 排满；加 8 px 页边距会让末列溢出被裁（滚动已禁用） |
 | 名称字号语义 | 继承 WinUI Body 档 | 固定 14 | 我们不在页面里引用 WinUI 类型梯度，值等同 |
 | 容器模板 | `ListViewItemPresenter` + VSM（`GridPage:766-820`） | 自定义 `Grid` + 自绘状态 | WinUI 2 在嵌入桌面/非激活窗口下不触发 PointerOver/Selected 视觉状态（已实测），只能自绘 |
 
@@ -141,7 +143,7 @@
 | 拖拽占位 | `GridViewItemPlaceholderBackground`（`GridPage:926`） | 有意不照搬 | 容器复用不显示占位 |
 | 重排提示偏移 | 16.0（`generic.xaml:64`） | 有意不照搬 | 不支持重排 |
 | 重排动画 | 350 ms（`GridPage:993`） | 有意不照搬 | 同上 |
-| 焦点视觉 | `FocusVisual*=0`、`FocusBorderBrush`（`GridPage:1005-1006,920`） | 有意不照搬 | 宿主 `WS_EX_NOACTIVATE`，键盘焦点不在本窗口 |
+| 焦点视觉 | `FocusVisual*=0`、`FocusBorderBrush`（`GridPage:1005-1006,920`） | 已对齐 | 文件项层显式写三条 0/False，取值同上游（见 2.4） |
 | 多选勾选框 | 32×32 / Margin 6 / Overlay（`GridPage:212-227,911`） | 有意不照搬 | 单选（`SelectionMode=Single`） |
 | 勾选框圆角 | 3（`GridViewItem_themeresources:24`） | 有意不照搬 | 无勾选框 |
 | 覆盖图标角标 | 32×32 / Margin 16（`GridPage:122-131`） | 缺失 | 未解析 Shell 覆盖图标 |
@@ -154,22 +156,43 @@
 | 列表/紧凑容器样式 | `LocalListItemContainerStyle`、`LocalCompactListItemContainerStyle`（`GridPage:757-893`） | 有意不照搬 | 只有网格布局，无 List/Cards |
 | 分组头样式 | `GridViewHeaderItem`（`GridPage:668-754`） | 有意不照搬 | 不分组 |
 
+## 2.4 上一轮「有意不照搬」的逐项复核（跟 / 不跟）
+
+| 项 | 上游 | 结论 | 依据 |
+| --- | --- | --- | --- |
+| 页边距 8 px | `GridPage:990` | **跟（已实现）** | 纯实现成本：`GridView.Padding=8`，同时把列行计算改为 `floor((宽-16)/180) × floor((高-16)/104)`，1280×672 DIP 下仍是 7×6=42 项/页，不会裁切 |
+| 图标与文字间距 | 0（`GridPage:106-110` 的 12 px 是图标方格内边距） | **跟（已实现）** | 图标行 32 与名称行紧邻，无额外间距；不再额外加 4–8 px 自造间距 |
+| 副信息行字号/行高/色值 | 12 / 16 / `#C5FFFFFF` | **跟（已实现）** | 保留副信息属于产品扩展，但字号/行高/色值统一按 Caption 档 |
+| 按下与悬停过渡时长 | 0 ms（`ObjectAnimationUsingKeyFrames KeyTime="0"`） | **跟（已一致）** | 自绘状态切换也是即时，不引入缓动；不需要新增时长资源 |
+| 焦点视觉 | `FocusVisual*=0`（`GridPage:1005-1006`） | **跟（已实现）** | 上游本身就是「厚度 0、不画焦点框」；文件项层显式写 `UseSystemFocusVisuals=False` + `FocusVisualPrimary/SecondaryThickness=0`，取值与上游一致，也契合 `WS_EX_NOACTIVATE` 不抢焦点 |
+| 禁用态 | `ListViewItemDisabledThemeOpacity=0.3`（`ListViewItem_themeresources:6`） | **不跟** | 没有“禁用文件项”概念（无权限项仍可选中/进入提示），实现出来不可达 |
+| 槽高 104 vs 240–248 | 图标方格 180 + 名称 60（`GridPage:99-210`） | **不跟** | 不是实现成本，是产品冲突：240 槽高在 1280×672 DIP 只有 2 行 × 7 列 = 14 项/页（现 42 项）；桌面层要求一屏尽量多放，且会连带把图标放大到 96+ |
+| 图标 32 vs 96/128/256 | `Layout:47-50` | **不跟** | 与上一条同源：96 px 图标要求槽高 ≥ 140，每页降到 24 项以内；且 `IconSizePx=32` 是全链路约定（Shell 缩略图解码、`MaxCachedIcons=160` 的 LRU 约 0.65 MB，改 96 后约 5.9 MB） |
+| 名称两行 40 vs 60 | `GridPage:198-208` | **不跟** | 用户明确要求「名称两行省略」；60 会让槽高再 +20、每页行数从 6 降到 5 |
+| 多选 | `SelectionMode` + 勾选框（`GridPage:212-227`） | **不跟** | 桌面双击直接进入目录，多选没有后续动作（无批量删除/移动）；勾选框还会盖住图标 |
+| 拖拽 | `GridPage:917-919` | **不跟** | 桌面层没有 OLE 拖放源/目标实现，也没有“拖到资源管理器”的落点语义 |
+| 重排 | `GridPage:993` 350 ms | **不跟** | 没有排序/手动排列功能，重排不可达 |
+| 角标（覆盖/快捷方式/盾牌） | `GridPage:122-158` | **不跟** | 需要 `IShellItemImageFactory` 的覆盖图标 + `.lnk` 解析 + 提权标记三套 Shell 能力；与“桌面图标”观感无关，收益低 |
+
 ## 3. 本次落到文件项层的改动
 
 `src/WinUI2Demo/ThemeResources.xaml`
 
 1. 文字色改 `TextFillColorPrimary/Secondary`；悬停/按下 `#12FFFFFF`；选中改「`#0DFFFFFF` + 2px 系统强调色描边」。
-2. 名称 13 → 14、SemiBold → Normal、行高 20、两行；副信息 11 → 12。
+2. 名称 13 → 14、SemiBold → Normal、行高 20、两行；副信息 11 → 12、行高 16。
 3. 文字区内边距改 `4,6,4,8`；内容宽 172 → 180；容器最小高 0 → 1。
-4. 新增 `ItemSelectedBorderBrush`、`ItemSelectedBorderThickness`、`ItemIdleBorderBrush`、`ItemNameLineHeight`。
+4. 新增 `ItemSelectedBorderBrush`、`ItemSelectedBorderThickness`、`ItemIdleBorderBrush`、`ItemNameLineHeight`、`ItemMetaLineHeight`、`ItemPagePadding`、`ItemPagePaddingSize`。
 
 `src/WinUI2Demo/FileViewPage.xaml`
 
 5. 条目根 `Border` 增加 `BorderBrush`/`BorderThickness` 承接选中描边。
+6. `GridView.Padding` 改 `8`（引用 `ItemPagePadding`）。
 
 `src/WinUI2Demo/FileViewPage.xaml.cs`
 
-6. `ApplySurfaceVisual` 在选中时写描边与 2px 粗细，切走时清零（`GridPage:932-934` 同语义）。
+7. `ApplySurfaceVisual` 在选中时写描边与 2px 粗细，切走时清零（`GridPage:932-934` 同语义）。
+8. `UpdatePageMetrics` 先扣 `2 × ItemPagePaddingSize` 再算列行，避免末列/末行被 Padding 裁切。
+9. `FileItemContainerStyle` 增加焦点视觉三条：`UseSystemFocusVisuals=False`、`FocusVisualPrimaryThickness=0`、`FocusVisualSecondaryThickness=0`（对齐 `GridPage:1005-1006`）。
 
 ## 4. 未覆盖与限制
 

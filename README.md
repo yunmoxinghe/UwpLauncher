@@ -17,6 +17,19 @@ UWP XAML 岛透明背景的可行性验证工程，也是后续桌面启动器�
 
 > MSIX 说明：本机以开发模式 `Add-AppxPackage -Register` 完成注册（签名安装因非管理员无法信任自签名证书而失败，错误 `0x800B0109`，已记录）。包标识与框架包依赖解析真实生效。
 
+## 交互演示包：WinUI2Demo
+
+把已验证的机制（`DesktopWindowXamlSource` + `IXamlSourceTransparency` + `WS_EX_NOREDIRECTIONBITMAP` + WorkerW）做成可直接在桌面运行的交互 demo：
+PageA/PageB 按钮往返导航（可观察返回栈与页面重建）、透明开/关、置顶浮层 ↔ 嵌入桌面切换，并含一个 WinUI 2 `InfoBar` 证明 `Microsoft.UI.Xaml` 主题生效。
+
+交付物在 [`文档/首次可行性验证/dist/`](文档/首次可行性验证/dist/)：
+
+- `WinUI2Demo_1.0.0.0_x64.msix`（10,055,215 字节）与 `WinUI2DemoDev.cer`
+- `WinUI2Demo-layout.zip`（开发者模式松散注册用）
+- `使用说明.md`（安装/启动/操作/正常现象/透明失效判定，含 `0x800B0109` 限制说明）
+
+本机实测：签名 MSIX 安装因非管理员返回 `0x800B0109`，开发模式 `Add-AppxPackage -Register` 成功；随后用包身份启动并逐项验证了按钮导航、返回栈、透明开关读回、WorkerW 切换与退出。
+
 ## 目录结构
 
 ```
@@ -28,7 +41,11 @@ UWP XAML 岛透明背景的可行性验证工程，也是后续桌面启动器�
         ├── VERIFICATION.md              # 完整验证报告（考据、实测数据、失败证据、局限）
         ├── LEDGER.md                     # 分阶段台账（环境、行号、结论）
         ├── artifacts/                    # 运行日志与屏幕截图证据
-        ├── scripts/run-probe.ps1         # 一键运行探针 + 截图（-Probe 选择工程）
+        ├── dist/                         # 交互演示的可安装交付物（MSIX / 证书 / layout zip / 使用说明）
+        ├── scripts/
+        │   ├── run-probe.ps1             # 一键运行探针 + 截图（-Probe 选择工程）
+        │   ├── run-demo.ps1              # 启动交互 demo（可选 --selftest 冒烟与截图）
+        │   └── package-msix.ps1          # 打包/签名/安装（-ProjectName 选择工程）
         └── src/
             ├── IslandProbe/              # 最小 UWP XAML Island 宿主工程
             │   ├── IslandProbe.csproj
@@ -37,8 +54,9 @@ UWP XAML 岛透明背景的可行性验证工程，也是后续桌面启动器�
             │   ├── ManualDefinitions.cs
             │   ├── NativeMethods.txt/.json    # CsWin32 配置与所需 API 清单
             │   └── App.xaml(.cs), app.manifest
-            └── WinUI2Probe/              # WinUI 2 对照工程（同样的宿主，内容改为 WinUI 2 控件）
-                ├── Package.appxmanifest  # MSIX 清单（Microsoft.UI.Xaml.2.8 框架包依赖）
+            ├── WinUI2Probe/              # WinUI 2 对照工程（同样的宿主，内容改为 WinUI 2 控件）
+            │   └── Package.appxmanifest  # MSIX 清单（Microsoft.UI.Xaml.2.8 框架包依赖）
+            └── WinUI2Demo/               # 交互演示工程（控制条 + Frame/Page + 透明/模式切换）
 ```
 
 完整报告见 [文档/首次可行性验证/VERIFICATION.md](文档/首次可行性验证/VERIFICATION.md)。

@@ -25,22 +25,35 @@ param(
     [switch]$SkipBuild,
 
     [ValidateSet("auto", "signed", "loose")]
-    [string]$InstallMode = "auto"
+    [string]$InstallMode = "auto",
+
+    # 工程名（src\<ProjectName>\<ProjectName>.csproj）与包标识，默认沿用旧探针
+    [string]$ProjectName = "WinUI2Probe",
+
+    [string]$PackageName = "",
+
+    # 证书主题必须与 Package.appxmanifest 的 Publisher 完全一致
+    [string]$CertSubject = ""
 )
 
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
-$src = Join-Path $root "src\WinUI2Probe"
-$proj = Join-Path $src "WinUI2Probe.csproj"
+
+if (-not $PackageName) { $PackageName = $ProjectName }
+if (-not $CertSubject) { $CertSubject = "CN=${PackageName}Dev" }
+
+$src = Join-Path $root "src\$ProjectName"
+$proj = Join-Path $src "$ProjectName.csproj"
 $tfm = "net10.0-windows10.0.26100.0"
 $out = Join-Path $src "bin\$Platform\$Configuration\$tfm"
 
-$work = Join-Path $root "artifacts\msix"
+$work = Join-Path $root "artifacts\msix\$ProjectName"
 $layout = Join-Path $work "layout"
-$msix = Join-Path $work "WinUI2Probe_1.0.0.0_x64.msix"
+$msix = Join-Path $work "${PackageName}_1.0.0.0_x64.msix"
 $pkgLog = Join-Path $work "package.log"
-$statusFile = Join-Path $root "artifacts\msix-install-status.txt"
+$statusFile = Join-Path $root "artifacts\$ProjectName-install-status.txt"
+$certName = "${PackageName}Dev"
 
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 Set-Content -Path $pkgLog -Value "" -Encoding UTF8
@@ -98,8 +111,8 @@ if (-not $SkipBuild) {
     if ($LASTEXITCODE -ne 0) { throw "构建失败，MSBuild exit=$LASTEXITCODE" }
 }
 
-if (-not (Test-Path (Join-Path $out "WinUI2Probe.exe"))) {
-    throw "未找到构建输出 $out\WinUI2Probe.exe"
+if (-not (Test-Path (Join-Path $out "$ProjectName.exe"))) {
+    throw "未找到构建输出 $out\$ProjectName.exe"
 }
 
 # 2) 组装布局
@@ -126,17 +139,17 @@ if (Test-Path $msix) { Remove-Item $msix -Force }
 if ($LASTEXITCODE -ne 0) { throw "makeappx 失败，exit=$LASTEXITCODE" }
 Write-PkgLog "packed $(Split-Path -Leaf $msix) size=$((Get-Item $msix).Length)"
 
-$subject = "CN=WinUI2ProbeDev"
+$subject = $CertSubject
 $cert = New-SelfSignedCertificate `
     -Type Custom `
     -Subject $subject `
     -KeyUsage DigitalSignature `
-    -FriendlyName "WinUI2Probe MSIX dev" `
+    -FriendlyName "$PackageName MSIX dev" `
     -CertStoreLocation "Cert:\CurrentUser\My" `
     -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3")
-$pfx = Join-Path $work "WinUI2ProbeDev.pfx"
-$cer = Join-Path $work "WinUI2ProbeDev.cer"
-$pwPlain = "WinUI2ProbeDev"
+$pfx = Join-Path $work "$certName.pfx"
+$cer = Join-Path $work "$certName.cer"
+$pwPlain = $certName
 $pw = ConvertTo-SecureString $pwPlain -AsPlainText -Force
 Export-PfxCertificate -Cert $cert -FilePath $pfx -Password $pw -Force | Out-Null
 Export-Certificate -Cert $cert -FilePath $cer -Force | Out-Null
@@ -145,7 +158,7 @@ if ($LASTEXITCODE -ne 0) { throw "signtool 失败，exit=$LASTEXITCODE" }
 Write-PkgLog "signed with $subject"
 
 # 4) 安装 / 注册
-$pkgName = "WinUI2Probe"
+$pkgName = $PackageName
 Get-AppxPackage -Name $pkgName | ForEach-Object {
     Write-PkgLog "移除已安装的 $($_.PackageFullName)"
     Remove-AppxPackage -Package $_.PackageFullName

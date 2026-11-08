@@ -1,0 +1,43 @@
+<Page
+    x:Class="WinUI2Demo.PageB"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="{x:Null}">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="40" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="72" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="#FFFF4500">
+            <TextBlock Text="PAGE B (OrangeRed band)" Foreground="White" FontSize="15"
+                       Margin="12,0,0,0" VerticalAlignment="Center" />
+        </Border>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Grid Grid.Column="0">
+                <TextBlock Text="透明区域：这里没有背景，透明开启时应看到桌面" Foreground="White"
+                           FontSize="13" Margin="12" VerticalAlignment="Top" TextWrapping="Wrap" />
+            </Grid>
+
+            <Border Grid.Column="1" Background="#80FF0000">
+                <TextBlock Text="50% RED" Foreground="White" FontSize="18"
+                           Margin="12" VerticalAlignment="Top" />
+            </Border>
+        </Grid>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="10" Margin="12,10,12,8"
+                    VerticalAlignment="Top">
+            <Button x:Name="BackButton" Content="← 返回 Page A" Click="Back_Click" />
+            <TextBlock x:Name="InstanceText" Foreground="White" FontSize="13"
+                       VerticalAlignment="Center" />
+        </StackPanel>
+    </Grid>
+</Page>

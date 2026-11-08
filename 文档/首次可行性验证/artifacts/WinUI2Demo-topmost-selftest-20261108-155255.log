@@ -1,0 +1,60 @@
+﻿[15:52:57.788] === WinUI2Demo ===
+[15:52:57.837] pid=23768 os=Microsoft Windows NT 10.0.26300.0
+[15:52:57.838] RoInitialize(STA) => hr=0x00000001
+[15:52:57.957] [PKG] Package.Current fullName=WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4 family=WinUI2Demo_p06pf12qzbwg4
+[15:52:58.071] mode=topmost transparent=True selftest=True
+[15:52:58.212] WindowsXamlManager.InitializeForCurrentThread => True
+[15:52:58.219] Window.Current => Windows.UI.Xaml.Window
+[15:52:58.222] CoreWindow.GetForCurrentThread => Windows.UI.Core.CoreWindow
+[15:52:58.234] [CoreWindowInterop] hwnd=0x29052E
+[15:52:58.391] [WINUI2] XamlControlsResources merged into Application.Resources
+[15:52:58.468] [WINUI2] resource NavigationViewContentBackground => SolidColorBrush color=#80FFFFFF opacity=1
+[15:52:58.531] [WINUI2] resource NavigationViewDefaultBackground lookup failed: COMException
+[15:52:58.533] [WINUI2] resource ApplicationPageBackgroundThemeBrush => SolidColorBrush color=#FFF3F3F3 opacity=1
+[15:52:58.539] [RegisterClass] host atom=49962 lastErr=0
+[15:52:58.553] [CreateWindow] host hwnd=0x7E087C exStyle=0x200088 lastErr=0
+[15:52:58.609] [DWS] created=True
+[15:52:58.623] [DWS] AttachToWindow(host) => 0x00000000
+[15:52:58.624] [DWS] island hwnd=0x2D08B8
+[15:52:58.998] [PAGE-A] ctor instance=#1 cacheMode=Disabled
+[15:52:59.006] [PAGE-A] OnNavigatedTo #1 mode=New param='start' backStack=0 canGoBack=False
+[15:52:59.033] [DEMO] DemoShell created, content=WinUI2Demo.PageA backStack=0 canGoBack=False
+[15:52:59.036] [DWS] Content set
+[15:52:59.039] [DWS] island sized to 1120x640
+[15:52:59.046] [XST] set_IsBackgroundTransparent(True) => hr=0x00000000 readback=True
+[15:52:59.047] host dpi=144 coreHwnd=0x29052E xamlHwnd=0x2D08B8
+[15:52:59.051] [SHOW] hostVisible=True xamlVisible=True
+[15:52:59.052] [RECT] host screen=(80,60,1200,700)
+[15:52:59.053] [RECT] island screen=(80,60,1200,700) root=0x7E087C
+[15:52:59.054] [HOTKEY] Ctrl+F2=True Ctrl+F3=True Ctrl+F4=True
+[15:53:00.056] [SELFTEST] transparency off
+[15:53:00.077] [XST] set_IsBackgroundTransparent(False) => hr=0x00000000 readback=False
+[15:53:00.077] [DEMO] transparency toggled => False
+[15:53:00.870] [SELFTEST] transparency on
+[15:53:00.899] [XST] set_IsBackgroundTransparent(True) => hr=0x00000000 readback=True
+[15:53:00.899] [DEMO] transparency toggled => True
+[15:53:01.458] [SELFTEST] navigate PageB
+[15:53:01.468] [NAV] Navigating to WinUI2Demo.PageB mode=New backStack=0
+[15:53:01.473] [PAGE-B] ctor instance=#1 cacheMode=Disabled
+[15:53:01.480] [NAV] Navigated to WinUI2Demo.PageB mode=New content=WinUI2Demo.PageB backStack=1 canGoBack=True
+[15:53:01.482] [PAGE-A] OnNavigatedFrom mode=New
+[15:53:01.483] [PAGE-B] OnNavigatedTo #1 mode=New param='selftest' backStack=1 canGoBack=True
+[15:53:02.278] [SELFTEST] go back
+[15:53:02.279] [NAV] Navigating to WinUI2Demo.PageA mode=Back backStack=1
+[15:53:02.281] [PAGE-A] ctor instance=#2 cacheMode=Disabled
+[15:53:02.282] [NAV] Navigated to WinUI2Demo.PageA mode=Back content=WinUI2Demo.PageA backStack=0 canGoBack=False
+[15:53:02.282] [PAGE-B] OnNavigatedFrom mode=Back
+[15:53:02.282] [PAGE-A] OnNavigatedTo #2 mode=Back param='start' backStack=0 canGoBack=False
+[15:53:03.064] [SELFTEST] mode -> workerw
+[15:53:03.100] [WORKERW] Progman=0x1015C
+[15:53:03.101] [WORKERW] SendMessage(Progman, 0x052C, 0, 0) => 0x0
+[15:53:03.101] [WORKERW] Progman child WorkerW=0x190564 valid=True visible=True
+[15:53:03.106] [REPARENT] hwnd=0x7E087C oldParent=0x1000C newParent=0x190564 style=0x54000000 exStyle=0x200080 lastErr=0
+[15:53:03.108] [DEMO] mode => workerw parent=0x190564 isChild=True
+[15:53:04.074] [SELFTEST] mode -> topmost
+[15:53:04.106] [DEMO] mode => topmost oldParent=0x190564 style=0x94000000 exStyle=0x200088 lastErr=0
+[15:53:04.885] [SELFTEST] close
+[15:53:04.907] [DEMO] close requested
+[15:53:04.907] [DEMO] interactive loop exited
+[15:53:04.942] [CLEANUP] DesktopWindowXamlSource disposed
+[15:53:04.964] [CLEANUP] windows destroyed

@@ -96,6 +96,8 @@ namespace WinUI2Demo
         private Brush? _hoverBrush;
         private Brush? _pressedBrush;
         private Brush? _selectedBrush;
+        private Brush? _selectedBorderBrush;
+        private double _selectedBorderThickness = 2;
         private static readonly long ViewLogIntervalTicks = 500 * Stopwatch.Frequency / 1000;
 
         private long _pageStartTicks;
@@ -143,6 +145,8 @@ namespace WinUI2Demo
             _hoverBrush = ResBrush("ItemHoverBrush");
             _pressedBrush = ResBrush("ItemPressedBrush");
             _selectedBrush = ResBrush("ItemSelectedBrush");
+            _selectedBorderBrush = ResBrush("ItemSelectedBorderBrush");
+            _selectedBorderThickness = ResDouble("ItemSelectedBorderThickness", 2);
             FileList.Loaded += (_, __) => AttachScrollViewer();
             // NativeAOT 下实测 Loaded 不一定会触发，布局变化时也尝试挂载
             FileList.LayoutUpdated += OnListLayoutUpdated;
@@ -286,10 +290,16 @@ namespace WinUI2Demo
         {
             if (surface is null)
                 return;
-            surface.Background = entry == _selectedEntry ? _selectedBrush
+
+            var selected = entry is not null && entry == _selectedEntry;
+            surface.Background = selected ? _selectedBrush
                 : entry == _pressedEntry ? _pressedBrush
                 : entry == _hoveredEntry ? _hoverBrush
                 : _idleBrush;
+
+            // 选中态 = 淡填充 + 2px 强调色描边（Files GridLayoutPage.xaml:932-934）
+            surface.BorderBrush = selected ? _selectedBorderBrush : null;
+            surface.BorderThickness = new Thickness(selected ? _selectedBorderThickness : 0);
         }
 
         private void UpdateEntrySurface(FileEntry? entry)

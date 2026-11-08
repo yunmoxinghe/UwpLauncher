@@ -54,6 +54,8 @@
                             Padding="{StaticResource ItemPadding}"
                             CornerRadius="{StaticResource ItemCornerRadius}"
                             Background="{StaticResource ItemIdleBrush}"
+                            BorderBrush="{StaticResource ItemIdleBorderBrush}"
+                            BorderThickness="0"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             AutomationProperties.Name="{x:Bind Name}"

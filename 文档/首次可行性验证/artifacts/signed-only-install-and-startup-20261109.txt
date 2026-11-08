@@ -1,0 +1,104 @@
+签名安装收敛 + 启动回归修复实测（2026-11-09）
+环境：本机 Windows 11 Build 26300，DevMode=True，非管理员会话，ConsentPromptBehaviorAdmin=0
+包：dist\WinUI2Demo_1.0.0.0_x64.msix（10,102,793 字节，SHA256 DDECDED43AAA5FA2A3DD4352700B0B56C525B31D63A50970CD9355B572CF75A2）
+证书：CN=WinUI2DemoDev 指纹 91C06EBA2A8C0DCD1B87DE11039024D1662B6832
+构建：Release + Debug 均 0 error（5 条既有警告：CS9191 ×3、CS8600、CS8602）
+
+======================================================================
+一、启动回归：根因与修复
+----------------------------------------------------------------------
+现象：签名安装后启动，进程在写日志 [PKG] 后即退出，UI 未创建。
+证据（Windows 事件日志 Application，02:06:18 / 02:06:19）：
+  .NET Runtime 1026: The process was terminated due to an unhandled exception.
+  Exception Info: System.Runtime.InteropServices.MarshalDirectiveException:
+    Cannot marshal 'parameter #2': Cannot marshal managed types when the runtime marshalling system is disabled.
+    at WinUI2Demo.Program.GetWindowThreadProcessId(IntPtr hwnd, UInt32& pid)
+    at WinUI2Demo.Program.ForegroundDesc(IntPtr fg) Program.cs:line 1309
+    at WinUI2Demo.Program.LogForeground(String tag) Program.cs:line 1315
+    at WinUI2Demo.Program.Main(String[] args) Program.cs:line 314
+根因：项目启用 DisableRuntimeMarshalling=true，上一轮加焦点日志时用了 out uint 的 DllImport，运行期封送被禁用 → 启动基线日志直接抛异常。
+修复：改为 blittable 指针签名（unsafe uint* pid），调用处用 unsafe 取地址；不启用运行期封送。
+文件：src/WinUI2Demo/Program.cs:193、1304-1311
+
+======================================================================
+二、最终 install.ps1（单一签名路径）实测输出
+命令：powershell -NoProfile -ExecutionPolicy Bypass -File dist\install.ps1
+----------------------------------------------------------------------
+
+=== 1/5 环境与包校验 ===
+      包：...\dist\WinUI2Demo_1.0.0.0_x64.msix（10102793 字节）
+      当前会话管理员：False
+      WinUI 2.8 框架包：Microsoft.UI.Xaml.2.8_8.2511.26001.0_x64__8wekyb3d8bbwe
+      证书：CN=WinUI2DemoDev  指纹=91C06EBA2A8C0DCD1B87DE11039024D1662B6832  有效期至=2027-11-09
+      包签名者指纹：91C06EBA2A8C0DCD1B87DE11039024D1662B6832
+PASS  证书与包签名者指纹一致（91C06EBA2A8C0DCD1B87DE11039024D1662B6832）
+
+=== 2/5 管理员权限 ===
+      将请求管理员权限（写入机器级证书信任存储必需）
+PASS  提权子进程已结束，退出码 0
+
+=== 提权进程执行结果 ===
+      ExitCode=0
+      证书校验：PASS（指纹与包内签名一致）
+      旧注册清理：PASS（移除 1 个）
+      证书导入：SKIPPED（两处已存在）
+      签名安装：PASS（Developer，C:\Program Files\WindowsApps\WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4）
+      残留松散注册：无
+      采用路径：签名 MSIX 安装
+      PackageFullName=WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4
+      InstallLocation=C:\Program Files\WindowsApps\WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4
+      SignatureKind=Developer
+EXITCODE=0
+
+======================================================================
+三、安装状态核验
+----------------------------------------------------------------------
+当前用户：
+  PackageFullName : WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4
+  SignatureKind   : Developer
+  InstallLocation : C:\Program Files\WindowsApps\WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4
+当前用户注册表仓库（HKCU AppModel\Repository\Packages）：
+  只有 WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4，root=C:\Program Files\WindowsApps\WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4
+提权 -AllUsers 查询：
+  WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4|C:\Program Files\WindowsApps\WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4|Developer
+遗留检查：
+  %LOCALAPPDATA%\WinUI2Demo\layout 不存在（已删除）
+  dist\WinUI2Demo-layout.zip 不存在（已删除）
+结论：系统内只剩签名安装的注册，无任何松散注册/临时包。
+
+======================================================================
+四、签名包启动实测（不点击、不抢焦点）
+----------------------------------------------------------------------
+启动方式：explorer.exe shell:AppsFolder\WinUI2Demo_p06pf12qzbwg4!App
+前台窗口（GetForegroundWindow 读回）：
+  before = 0x100490（class=Chrome_WidgetWin_1 pid=6540）
+  after  = 0x100490（class=Chrome_WidgetWin_1 pid=6540）
+  same   = True
+日志（%LOCALAPPDATA%\WinUI2Demo\winui2demo.log）关键行：
+  [PKG] Package.Current fullName=WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4 family=WinUI2Demo_p06pf12qzbwg4
+  [FG] startup-before hwnd=0x100490 class=Chrome_WidgetWin_1 pid=6540
+  mode=desktoppane transparent=True selftest=False
+  [NOACTIVATE] host hwnd=0x6E0568 ex=0x8200080 => 0x8200080 ok=True
+  [DWS] AttachToWindow(host) => 0x00000000
+  [NAV] Navigated to WinUI2Demo.FileViewPage mode=New content=WinUI2Demo.FileViewPage
+  [FV] page start path='C:\Users\gold\Downloads'
+  [XST] set_IsBackgroundTransparent(True) => hr=0x00000000 readback=True
+  [STARTUP] t=2359ms transparency applied ok=True requested=True
+  [HOTKEY] Ctrl+F2=True Ctrl+F4=True
+  [REPARENT] hwnd=0x6E0568 oldParent=0x1000C newParent=0x160A8E style=0x44000000 exStyle=0x8200080 lastErr=0
+  [DESKTOPPANE] parent=0x160A8E defView=0x300F34 hostIsChild=True
+  [STARTUP] t=2384ms desktop embed ok mode=desktoppane
+  [FV] page metrics w=1264 h=656 cols=7 rows=6 pageSize=42
+  [FV] firstBatch count=2 atMs=367 uiDelayMs=310 applyMs=1 enumMs=21
+  [FV] firstRealized name='xerj-agent-guide.md' atMs=487
+  [STARTUP] t=2907ms firstFrame committed ticks=7 shellLoaded=True dwmFlushHr=0x00000000
+  [STARTUP] anim start t=2947ms durationMs=240 from=0.05 (composition)
+  [STARTUP] anim complete t=3230ms afterMs=283 visualOpacity=1.00
+结论：签名包启动后仍是 desktoppane 嵌入 + 透明读回 True + 文件网格正常出项；首帧提交后才播入场动画。
+验证结束后已关闭该实例（CloseMainWindow 未生效，最终 Stop-Process），当前进程数为 0。
+
+======================================================================
+五、未验证项
+----------------------------------------------------------------------
+- UI 焦点读回（启动 → 真实点击 → 退出）仍未做，等用户指定时间窗。
+- 本次启动验证只做了启动前后前台窗口比对，没有注入点击。

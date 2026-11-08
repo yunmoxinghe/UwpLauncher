@@ -190,7 +190,7 @@ namespace WinUI2Demo
         private static extern nint WindowFromPoint(POINT32 point);
 
         [DllImport("user32.dll")]
-        private static extern uint GetWindowThreadProcessId(nint hwnd, out uint pid);
+        private static extern unsafe uint GetWindowThreadProcessId(nint hwnd, uint* pid);
 
         [DllImport("user32.dll")]
         private static extern nint MonitorFromWindow(nint hwnd, uint flags);
@@ -1306,7 +1306,7 @@ namespace WinUI2Demo
             if (fg == 0)
                 return "none";
             var pid = 0u;
-            GetWindowThreadProcessId(fg, out pid);
+            unsafe { GetWindowThreadProcessId(fg, &pid); }
             return $"hwnd=0x{fg:X} class={ClassNameOf(fg)} pid={pid}";
         }
 

@@ -6,12 +6,12 @@
   1. 构建 WinUI2Probe；
   2. 组装 MSIX 布局（exe + 依赖 + AppxManifest.xml + logo）；
   3. MakeAppx 打包，SignTool 用自签名证书签名；
-  4. 依次尝试“签名安装”与“开发模式松散注册”（-Register，无需证书信任）。
+  4. 默认只做签名 MSIX 安装；松散注册仅作为显式调试选项。
 
 .PARAMETER InstallMode
-  auto（默认）：先试签名 MSIX 安装，失败则回退到松散注册
-  signed：只允许签名 MSIX 安装，失败即报错
-  loose：只做松散注册
+  signed（默认）：只允许签名 MSIX 安装，失败即报错（交付形态）
+  auto：先试签名 MSIX 安装，失败则回退到松散注册（仅调试用）
+  loose：只做松散注册（仅调试用）
 
 .PARAMETER SkipBuild
   跳过 MSBuild，复用已有 bin 输出。
@@ -25,7 +25,7 @@ param(
     [switch]$SkipBuild,
 
     [ValidateSet("auto", "signed", "loose")]
-    [string]$InstallMode = "auto",
+    [string]$InstallMode = "signed",
 
     # 工程名（src\<ProjectName>\<ProjectName>.csproj）与包标识，默认沿用旧探针
     [string]$ProjectName = "WinUI2Probe",

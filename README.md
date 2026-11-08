@@ -15,7 +15,7 @@ UWP XAML 岛透明背景的可行性验证工程，也是后续桌面启动器�
 
 **WinUI 2 对照实验**：同一宿主下把 `Microsoft.UI.Xaml.Controls.NavigationView` 作为岛内容时，未打包进程激活失败（`0x80040154 REGDB_E_CLASSNOTREG`）——这是阶段结论；改为 MSIX 打包（声明 `Microsoft.UI.Xaml.2.8` 框架包依赖、开发模式注册）后，`XamlControlsResources` / `NavigationView` / `InfoBar` 均正常创建并真实渲染。透明开关在包标识下仍生效（对照内容严格透出绿底/壁纸）；但 `NavigationView` 模板自带 `#80FFFFFF`（50% 白）内容底色，画面是“50% 白 + 背景”的混色，**不能**据此声称 WinUI 2 内容完全透明。详见报告第 4、5 节。
 
-> MSIX 说明：交付包已能完成**签名安装**。`install.ps1` 会自提升把自签名证书导入本机 `LocalMachine\TrustedPeople` 与 `LocalMachine\Root`，再执行 `Add-AppxPackage`；拒绝提权或任一步失败时自动回退开发者模式松散注册。早期“非管理员导致 `0x800B0109`”的结论保留在台账中作为历史记录。
+> MSIX 说明：交付包**只走签名安装**。`install.ps1` 会自提升把自签名证书导入本机 `LocalMachine\TrustedPeople` 与 `LocalMachine\Root`，校验后执行 `Add-AppxPackage`；任一步失败都会明确报错并给出人工修复命令，不再回退松散注册。早期“非管理员导致 `0x800B0109`”的结论保留在台账中作为历史记录。
 
 ## 交互演示包：WinUI2Demo
 
@@ -24,12 +24,11 @@ PageA/PageB 按钮往返导航（可观察返回栈与页面重建）、透明�
 
 交付物在 [`文档/首次可行性验证/dist/`](文档/首次可行性验证/dist/)：
 
-- `WinUI2Demo_1.0.0.0_x64.msix`（10,102,787 字节）与 `WinUI2DemoDev.cer`
-- `WinUI2Demo-layout.zip`（开发者模式松散注册用）
-- `install.ps1`（一键安装：自提升 → 机器级证书信任 → 签名安装，失败回退松散注册，每步打印 HRESULT）
+- `WinUI2Demo_1.0.0.0_x64.msix`（10,102,793 字节）与 `WinUI2DemoDev.cer`
+- `install.ps1`（一键安装：自提升 → 机器级双存储证书信任 → 校验 → 签名安装，每步打印 HRESULT）
 - `使用说明.md`（安装/启动/操作/正常现象/透明失效判定）
 
-本机实测（2026-11-09）：默认路径签名安装成功，包落在 `C:\Program Files\WindowsApps\WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4`（`SignatureKind=Developer`）；证书已进入 `LocalMachine\TrustedPeople` 与 `LocalMachine\Root`。四条分支（提权签名安装、已信任时非提权签名安装、未信任时松散注册、证书不匹配保护）均已实跑通过，证据见 `artifacts/install-verify-20261109.txt`。
+本机实测（2026-11-09）：只走签名安装，包落在 `C:\Program Files\WindowsApps\WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4`（`SignatureKind=Developer`）；证书已进入 `LocalMachine\TrustedPeople` 与 `LocalMachine\Root`。安装后当前用户与 `-AllUsers` 均只剩这一个注册，无松散注册；签名包启动实测 `mode=desktoppane`、透明读回 `True`、`desktop embed ok`、文件网格正常出项。证据见 `artifacts/signed-only-install-and-startup-20261109.txt`。
 
 ## 目录结构
 

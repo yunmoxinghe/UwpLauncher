@@ -364,3 +364,28 @@ XAML 内容：左右两列，左列无背景，右列 50% 红（`#80FF0000`）�
 - UAC 点「否」分支：本机 `ConsentPromptBehaviorAdmin=0`，管理员提权不弹窗，无法在不改系统策略的前提下触发；其后续代码与 `-NoElevate` 相同，已由兜底分支覆盖。
 - 安装完成后未自动启动 UI，焦点读回与真实点击验证仍待用户指定的时间窗。
 
+## 收敛为单一签名安装 + 启动回归修复（2026-11-09 第二次）
+
+### 安装链路收敛
+
+- 按用户要求彻底移除临时包路线：`install.ps1` 不再支持松散注册/`layout`，`WinUI2Demo-layout.zip` 从交付目录删除，使用说明只保留签名安装。
+- 新流程：校验指纹 → 自提升（子窗口隐藏、结果回传）→ 清理同名旧注册 → 证书导入 `TrustedPeople`+`Root` 并校验 → `Add-AppxPackage` → 校验 `SignatureKind` 非 `None` 且路径在 `WindowsApps` → 检查无残留非 `WindowsApps` 注册。
+- 任一失败：打印 FAIL + HRESULT + 人工修复命令，退出码非 0，不再降级。
+- `scripts/package-msix.ps1` 默认 `InstallMode` 由 `auto` 改为 `signed`，避免以后打包时无意产生松散注册；`auto/loose` 仅保留为显式调试选项。
+- 本机清理：`%LOCALAPPDATA%\WinUI2Demo\layout` 与 `dist\WinUI2Demo-layout.zip` 均已删除。
+
+### 启动回归（重要）
+
+- 现象：签名安装后启动即退出，日志停在 `[PKG]`，UI 未创建。事件日志 1026 给出完整堆栈。
+- 根因：上一轮加焦点读回日志时，`GetWindowThreadProcessId(nint, out uint)` 用了运行期封送；项目启用 `DisableRuntimeMarshalling=true`，在 `Main → LogForeground("startup-before")` 直接抛 `MarshalDirectiveException`（`0xE0434352`），进程在 XAML 初始化前终止。此前“焦点验证未做”，所以该回归未被发现。
+- 修复：改为 blittable 指针签名 `unsafe uint* pid` + 调用处 `unsafe { ... &pid }`，不重新启用运行期封送。位置 `src/WinUI2Demo/Program.cs:193`、`1304-1311`。
+- 复测：Debug/Release 均 0 error；Release 重新打包、签名安装；启动日志 `mode=desktoppane`、`[XST] ... readback=True`、`[DESKTOPPANE] hostIsChild=True`、`desktop embed ok`、`firstFrame committed` 后才 `anim start`，文件网格 `items=2` 正常出项；启动前后前台窗口均为同一 `Chrome_WidgetWin_1`。
+
+### 最终状态
+
+- `PackageFullName=WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4`
+- `SignatureKind=Developer`，`InstallLocation=C:\Program Files\WindowsApps\WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4`
+- 当前用户与 `-AllUsers` 均只有一个注册，无松散注册残留。
+- 证据：`artifacts/signed-only-install-and-startup-20261109.txt`。
+
+

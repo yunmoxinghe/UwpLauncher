@@ -2,7 +2,7 @@
 
 UWP XAML 岛透明背景的可行性验证工程，也是后续桌面启动器方向的实验底座。
 
-本仓库针对 [DesktopFlyouts](https://github.com/0x5bfa/DesktopFlyouts) 的 UWP 版 XAML Island 透明实现做了源码考据，并在本机从零搭建最小宿主工程复现、实测，随后额外验证了把该岛挂到桌面 `WorkerW` 层后透明是否仍然成立。结论以实际运行的像素采样与日志为准，不以静态阅读代码代替验证。
+本仓库针对 [DesktopFlyouts](https://github.com/0x5bfa/DesktopFlyouts) 的 UWP 版 XAML Island 透明实现做了源码考据，并在本机从零搭建最小宿主工程复现、实测，随后额外验证了把该岛挂到桌面 `WorkerW` 层后透明是否仍然成立。另含一个 WinUI 2 对照实验（`Microsoft.UI.Xaml 2.x` 控件作为岛内容）。结论以实际运行的像素采样与日志为准，不以静态阅读代码代替验证。
 
 ## 已验证结论
 
@@ -12,6 +12,8 @@ UWP XAML 岛透明背景的可行性验证工程，也是后续桌面启动器�
 - **首轮失败已留证**：按“枚举顶层 WorkerW”的经典写法会选到不可用句柄，`SetParent` 返回 `ERROR_INVALID_PARAMETER (87)`；根因是本机壁纸 `WorkerW` 为 `Progman` 的子窗口，而非顶层窗口。失败日志保留在 `artifacts/`。
 
 **嵌入桌面阶段的局限**：上述 WorkerW 结论只代表本机 Windows 11 Build 26300、150% DPI、单个进程单个岛的观测；同一 WorkerW 层下普通 GDI 子窗口不参与桌面合成（只有 DComp/XAML 内容与系统壁纸可见），且该场景下的输入、焦点与命中测试行为未做验证，换机器或换系统版本需要按当地窗口树重测。
+
+**WinUI 2 对照实验**：同一宿主下把 `Microsoft.UI.Xaml.Controls.NavigationView` 作为岛内容时，WinUI 2 控件在未打包进程中激活失败（`0x80040154 REGDB_E_CLASSNOTREG`），岛内容始终未渲染；宿主层透明本身仍生效（`true` 透出绿底/壁纸、`false` 白底）。该结果只能证明未打包宿主无法承载 WinUI 2，**不能**据此判定 WinUI 2 内容的透明属性，详见报告第 4 节。
 
 ## 目录结构
 
@@ -24,14 +26,16 @@ UWP XAML 岛透明背景的可行性验证工程，也是后续桌面启动器�
         ├── VERIFICATION.md              # 完整验证报告（考据、实测数据、失败证据、局限）
         ├── LEDGER.md                     # 分阶段台账（环境、行号、结论）
         ├── artifacts/                    # 运行日志与屏幕截图证据
-        ├── scripts/run-probe.ps1         # 一键运行探针 + 截图
-        └── src/IslandProbe/              # 最小 UWP XAML Island 宿主工程
-            ├── IslandProbe.csproj
-            ├── Program.cs                # 岛创建、透明开关、WorkerW 挂载、像素采样
-            ├── IXamlSourceTransparency.cs# 按 IID 手工定义的透明接口
-            ├── ManualDefinitions.cs
-            ├── NativeMethods.txt/.json   # CsWin32 配置与所需 API 清单
-            └── App.xaml(.cs), app.manifest
+        ├── scripts/run-probe.ps1         # 一键运行探针 + 截图（-Probe 选择工程）
+        └── src/
+            ├── IslandProbe/              # 最小 UWP XAML Island 宿主工程
+            │   ├── IslandProbe.csproj
+            │   ├── Program.cs            # 岛创建、透明开关、WorkerW 挂载、像素采样
+            │   ├── IXamlSourceTransparency.cs  # 按 IID 手工定义的透明接口
+            │   ├── ManualDefinitions.cs
+            │   ├── NativeMethods.txt/.json    # CsWin32 配置与所需 API 清单
+            │   └── App.xaml(.cs), app.manifest
+            └── WinUI2Probe/              # WinUI 2 对照工程（同样的宿主，内容改为 WinUI 2 控件）
 ```
 
 完整报告见 [文档/首次可行性验证/VERIFICATION.md](文档/首次可行性验证/VERIFICATION.md)。
@@ -55,9 +59,18 @@ powershell -ExecutionPolicy Bypass -File `
 powershell -ExecutionPolicy Bypass -File `
   "文档/首次可行性验证/scripts/run-probe.ps1" `
   -Mode workerw -Transparent on
+
+# 4) WinUI 2 对照工程（构建后加 -Probe WinUI2Probe）
+& "<VS 安装目录>\MSBuild\Current\Bin\MSBuild.exe" `
+  "文档/首次可行性验证/src/WinUI2Probe/WinUI2Probe.csproj" `
+  /restore /p:Platform=x64 /p:Configuration=Debug
+
+powershell -ExecutionPolicy Bypass -File `
+  "文档/首次可行性验证/scripts/run-probe.ps1" `
+  -Probe WinUI2Probe -Mode topmost -Transparent on
 ```
 
-探针参数：`--mode topmost|plain|workerw`、`--transparent 1|0`、`--log <path>`、`--hold <ms>`、`--capture <ms>`。
+探针参数：`-Probe IslandProbe|WinUI2Probe`、`--mode topmost|plain|workerw`、`--transparent 1|0`、`--log <path>`、`--hold <ms>`、`--capture <ms>`。
 
 判定方式：探针在屏幕坐标固定采样点用 `GetPixel` 读取合成后的真实像素，同时脚本保存整屏截图；`topmost` 模式以纯绿对照窗为后方参照，`workerw` 模式以桌面壁纸为参照。
 

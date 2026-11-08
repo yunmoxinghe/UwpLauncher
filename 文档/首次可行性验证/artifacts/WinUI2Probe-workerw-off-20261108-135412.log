@@ -1,0 +1,38 @@
+﻿[13:54:13.487] === WinUI2Probe ===
+[13:54:13.503] pid=12224 os=Microsoft Windows NT 10.0.26300.0
+[13:54:13.504] RoInitialize(STA) => hr=0x00000001
+[13:54:13.666] mode=workerw transparent=False hold=5000 captureAt=2500
+[13:54:13.762] WindowsXamlManager.InitializeForCurrentThread => True
+[13:54:13.766] Window.Current => Windows.UI.Xaml.Window
+[13:54:13.769] CoreWindow.GetForCurrentThread => Windows.UI.Core.CoreWindow
+[13:54:13.780] [CoreWindowInterop] hwnd=0x580014
+[13:54:13.816] [WINUI2] XamlControlsResources FAILED: System.Runtime.InteropServices.COMException hr=0x80040154 msg=没有注册类 (0x80040154 (REGDB_E_CLASSNOTREG))
+[13:54:13.823] [RegisterClass] backdrop atom=49927 lastErr=0
+[13:54:13.840] [CreateWindow] backdrop hwnd=0x1C08E4 lastErr=0
+[13:54:13.841] [RegisterClass] host atom=49929 lastErr=0
+[13:54:13.844] [CreateWindow] host hwnd=0x2E0DD0 exStyle=0x200080 lastErr=0
+[13:54:13.894] [DWS] created=True
+[13:54:13.904] [DWS] AttachToWindow(host) => 0x00000000
+[13:54:13.904] [DWS] island hwnd=0x2E0D5C
+[13:54:13.918] [WINUI2] new NavigationView() FAILED: System.Runtime.InteropServices.COMException hr=0x80040154 msg=没有注册类 (0x80040154 (REGDB_E_CLASSNOTREG))
+[13:54:13.918] [DWS] Content NOT set (WinUI 2 content creation failed)
+[13:54:13.920] [DWS] island sized to 520x380
+[13:54:13.923] [XST] set_IsBackgroundTransparent(False) => hr=0x00000000 readback=False
+[13:54:13.923] host dpi=144 coreHwnd=0x580014 xamlHwnd=0x2E0D5C
+[13:54:13.926] [WORKERW] Progman=0x1015C
+[13:54:13.926] [WORKERW] SendMessage(Progman, 0x052C, 0, 0) => 0x0
+[13:54:13.927] [WORKERW] Progman child WorkerW=0x3905D8 valid=True visible=True
+[13:54:13.932] [REPARENT] hwnd=0x1C08E4 oldParent=0x1000C newParent=0x3905D8 style=0x54000000 exStyle=0x8000080 lastErr=0
+[13:54:13.934] [REPARENT] hwnd=0x2E0DD0 oldParent=0x1000C newParent=0x3905D8 style=0x44000000 exStyle=0x200080 lastErr=0
+[13:54:13.936] [WORKERW] parent=0x3905D8 hostIsChild=True backdropIsChild=True
+[13:54:13.936] [SHOW] hostVisible=True xamlVisible=True backdropVisible=True
+[13:54:13.937] [RECT] host screen=(60,60,580,440)
+[13:54:13.937] [RECT] island screen=(60,60,580,440) root=0x1015C
+[13:54:16.448] [SAMPLE] dpi=144 hostRect=(60,60,520x380) backdrop=(20,20,600x460)
+[13:54:16.452] [SAMPLE] transparent_left (190,269) COLORREF=0x00FFFFFF RGB=(255,255,255)
+[13:54:16.469] [SAMPLE] semi_red_right (450,269) COLORREF=0x00FFFFFF RGB=(255,255,255)
+[13:54:16.486] [SAMPLE] host_top_left (65,65) COLORREF=0x00FFFFFF RGB=(255,255,255)
+[13:54:16.502] [SAMPLE] backdrop_outside (30,30) COLORREF=0x00C3B384 RGB=(132,179,195)
+[13:54:16.518] [SAMPLE] desktop_reference (10,700) COLORREF=0x00776939 RGB=(57,105,119)
+[13:54:19.037] [CLEANUP] DesktopWindowXamlSource disposed
+[13:54:19.041] [CLEANUP] windows destroyed

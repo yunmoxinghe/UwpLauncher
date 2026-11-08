@@ -1,0 +1,32 @@
+﻿[13:53:03.174] === WinUI2Probe ===
+[13:53:03.184] pid=14600 os=Microsoft Windows NT 10.0.26300.0
+[13:53:03.185] RoInitialize(STA) => hr=0x00000001
+[13:53:03.531] mode=topmost transparent=True hold=5000 captureAt=2500
+[13:53:03.627] WindowsXamlManager.InitializeForCurrentThread => True
+[13:53:03.633] Window.Current => Windows.UI.Xaml.Window
+[13:53:03.638] CoreWindow.GetForCurrentThread => Windows.UI.Core.CoreWindow
+[13:53:03.648] [CoreWindowInterop] hwnd=0x1908E4
+[13:53:03.702] [WINUI2] XamlControlsResources FAILED: System.Runtime.InteropServices.COMException hr=0x80040154 msg=没有注册类 (0x80040154 (REGDB_E_CLASSNOTREG))
+[13:53:03.707] [RegisterClass] backdrop atom=49925 lastErr=0
+[13:53:03.724] [CreateWindow] backdrop hwnd=0x2B0DD0 lastErr=0
+[13:53:03.725] [RegisterClass] host atom=49926 lastErr=0
+[13:53:03.727] [CreateWindow] host hwnd=0x2408A8 exStyle=0x200088 lastErr=0
+[13:53:03.767] [DWS] created=True
+[13:53:03.781] [DWS] AttachToWindow(host) => 0x00000000
+[13:53:03.782] [DWS] island hwnd=0x100860
+[13:53:03.799] [WINUI2] new NavigationView() FAILED: System.Runtime.InteropServices.COMException hr=0x80040154 msg=没有注册类 (0x80040154 (REGDB_E_CLASSNOTREG))
+[13:53:03.799] [DWS] Content NOT set (WinUI 2 content creation failed)
+[13:53:03.801] [DWS] island sized to 520x380
+[13:53:03.803] [XST] set_IsBackgroundTransparent(True) => hr=0x00000000 readback=True
+[13:53:03.803] host dpi=144 coreHwnd=0x1908E4 xamlHwnd=0x100860
+[13:53:03.807] [SHOW] hostVisible=True xamlVisible=True backdropVisible=True
+[13:53:03.808] [RECT] host screen=(60,60,580,440)
+[13:53:03.808] [RECT] island screen=(60,60,580,440) root=0x2408A8
+[13:53:06.313] [SAMPLE] dpi=144 hostRect=(60,60,520x380) backdrop=(20,20,600x460)
+[13:53:06.332] [SAMPLE] transparent_left (190,269) COLORREF=0x0000FF00 RGB=(0,255,0)
+[13:53:06.345] [SAMPLE] semi_red_right (450,269) COLORREF=0x0000FF00 RGB=(0,255,0)
+[13:53:06.362] [SAMPLE] host_top_left (65,65) COLORREF=0x0000FF00 RGB=(0,255,0)
+[13:53:06.379] [SAMPLE] backdrop_outside (30,30) COLORREF=0x0000FF00 RGB=(0,255,0)
+[13:53:06.396] [SAMPLE] desktop_reference (10,700) COLORREF=0x00F5F5F5 RGB=(245,245,245)
+[13:53:08.929] [CLEANUP] DesktopWindowXamlSource disposed
+[13:53:08.938] [CLEANUP] windows destroyed

@@ -1,0 +1,30 @@
+﻿[13:58:17.421] === IslandProbe ===
+[13:58:17.453] pid=8948 os=Microsoft Windows NT 10.0.26300.0
+[13:58:17.454] RoInitialize(STA) => hr=0x00000001
+[13:58:18.111] mode=topmost transparent=True hold=5000 captureAt=2500
+[13:58:18.327] WindowsXamlManager.InitializeForCurrentThread => True
+[13:58:18.344] Window.Current => Windows.UI.Xaml.Window
+[13:58:18.359] CoreWindow.GetForCurrentThread => Windows.UI.Core.CoreWindow
+[13:58:18.371] [CoreWindowInterop] hwnd=0x220860
+[13:58:18.391] [RegisterClass] backdrop atom=49925 lastErr=0
+[13:58:18.412] [CreateWindow] backdrop hwnd=0x4B0898 lastErr=0
+[13:58:18.417] [RegisterClass] host atom=49928 lastErr=0
+[13:58:18.421] [CreateWindow] host hwnd=0x1B0DC6 exStyle=0x200088 lastErr=0
+[13:58:18.512] [DWS] created=True
+[13:58:18.534] [DWS] AttachToWindow(host) => 0x00000000
+[13:58:18.534] [DWS] island hwnd=0x2F0DD0
+[13:58:18.686] [DWS] Content set
+[13:58:18.690] [DWS] island sized to 520x380
+[13:58:18.695] [XST] set_IsBackgroundTransparent(True) => hr=0x00000000 readback=True
+[13:58:18.695] host dpi=144 coreHwnd=0x220860 xamlHwnd=0x2F0DD0
+[13:58:18.701] [SHOW] hostVisible=True xamlVisible=True backdropVisible=True
+[13:58:18.703] [RECT] host screen=(60,60,580,440)
+[13:58:18.703] [RECT] island screen=(60,60,580,440) root=0x1B0DC6
+[13:58:21.215] [SAMPLE] dpi=144 hostRect=(60,60,520x380) backdrop=(20,20,600x460)
+[13:58:21.240] [SAMPLE] transparent_left (190,269) COLORREF=0x0000FF00 RGB=(0,255,0)
+[13:58:21.256] [SAMPLE] semi_red_right (450,269) COLORREF=0x00007F80 RGB=(128,127,0)
+[13:58:21.273] [SAMPLE] host_top_left (65,65) COLORREF=0x0000FF00 RGB=(0,255,0)
+[13:58:21.289] [SAMPLE] backdrop_outside (30,30) COLORREF=0x0000FF00 RGB=(0,255,0)
+[13:58:21.305] [SAMPLE] desktop_reference (10,700) COLORREF=0x00F5F5F5 RGB=(245,245,245)
+[13:58:23.845] [CLEANUP] DesktopWindowXamlSource disposed
+[13:58:23.870] [CLEANUP] windows destroyed

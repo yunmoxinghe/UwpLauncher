@@ -113,3 +113,29 @@ XAML 内容：左右两列，左列无背景，右列 50% 红（`#80FF0000`）�
 - 额外观察：同时挂进 WorkerW 的普通 GDI 绿色对比窗**不参与桌面合成**（其区域采样 (30,30) 始终为壁纸色 RGB(193,203,215)，非绿色）；同样位置换成 DComp/XAML 内容则正常显示。因此 WorkerW 实验以壁纸作为“后方参照”，并以 ON/OFF 差值 + 红色混色算式交叉验证。
 - 结论：**SetParent 到 Progman 子 WorkerW 后透明仍然成立**；透明岛的左半显示壁纸、右半为 50% 红与壁纸混色。
 - 截图证据：`artifacts/workerw-on2.png` / `workerw-off2.png`（裁剪图 `workerw-on.png`/`workerw-off.png` 及 `-crop.png`）。
+
+## 阶段 4：WinUI 2 对照实验（Microsoft.UI.Xaml 2.x）（已完成，结论为“内容激活失败”）
+
+工程：`src/WinUI2Probe/`（独立工程，与 IslandProbe 共存；宿主/采样代码复用，仅内容构造改为 WinUI 2）
+构建：VS 2026 MSBuild `WinUI2Probe.csproj /p:Platform=x64 /p:Configuration=Debug` → **成功**（`Microsoft.UI.Xaml.Controls.NavigationView` 可赋给 `DesktopWindowXamlSource.Content`，类型兼容）
+内容构造：合并 `Microsoft.UI.Xaml.Controls.XamlControlsResources` → `new Microsoft.UI.Xaml.Controls.NavigationView()` → 设 `Content` 为与阶段 2 相同的两列采样布局（左列无背景、右列 50% 红）。失败时不设替代内容，岛保持为空。
+
+失败证据（4 组运行日志一致，`WinUI2Probe-*.log`）：
+- `[WINUI2] XamlControlsResources FAILED: System.Runtime.InteropServices.COMException hr=0x80040154 msg=没有注册类 (0x80040154 (REGDB_E_CLASSNOTREG))`
+- `[WINUI2] new NavigationView() FAILED: ... hr=0x80040154 (REGDB_E_CLASSNOTREG)`
+- `[DWS] AttachToWindow(host) => 0x00000000`、`[XST] set_IsBackgroundTransparent(...) hr=0x00000000`（宿主与透明 API 本身正常）
+- `[DWS] Content NOT set (WinUI 2 content creation failed)`
+
+| 配置 | 左半 (190,269) | 右半 (450,269) | 说明 |
+|---|---|---|---|
+| topmost / `true` | RGB(0,255,0) | RGB(0,255,0) | 整岛透出绿对照窗，无红色内容 |
+| topmost / `false` | RGB(255,255,255) | RGB(255,255,255) | 空白岛默认白底 |
+| workerw / `true` | RGB(160,196,208) | RGB(164,198,210) | 透出壁纸，无红色内容 |
+| workerw / `false` | RGB(255,255,255) | RGB(255,255,255) | 白底 |
+
+根因（实测旁证）：
+- 本机已安装 `Microsoft.UI.Xaml.2.8 8.2511.26001.0 (x64)` 框架包（`Get-AppxPackage Microsoft.UI.Xaml*`）。
+- 但探针是**未打包 Win32 进程**，无 MSIX 包标识/框架包依赖图，WinRT 激活无法解析框架包内可激活类 → `REGDB_E_CLASSNOTREG`。
+- 输出目录仅有 `Microsoft.UI.Xaml.Projection.dll`，无原生 `Microsoft.UI.Xaml.dll`。
+- 未采用 MSIX 打包/声明框架包依赖等手段绕过；因此“WinUI 2 内容自身透明”无法判定。
+- 结论：**宿主层透明仍成立（true 透出绿底/壁纸，false 白底；WorkerW SetParent 成功 lastErr=0），但 WinUI 2 内容从未渲染；这不是透明失败。**

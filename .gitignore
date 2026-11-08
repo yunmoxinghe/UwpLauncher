@@ -13,3 +13,7 @@
 # 系统临时文件
 Thumbs.db
 .DS_Store
+
+# NativeAOT 验证产物（本地复现用，不入库）
+文档/首次可行性验证/artifacts/aot/
+文档/首次可行性验证/artifacts/coreclr-backup/

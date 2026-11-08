@@ -21,6 +21,9 @@
 
 .PARAMETER ExitBy
   click（默认，点击退出按钮）/ hotkey（Ctrl+F4，验证宏键在文件页仍可用）。
+
+.PARAMETER Repeats
+  同一次会话内用“重新枚举”重复加载次数（默认 1）。用于同缓存、同进程状态的性能复测。
 #>
 param(
     [ValidateSet("topmost", "desktoppane", "workerw")]
@@ -34,6 +37,12 @@ param(
 
     [ValidateSet("click", "hotkey")]
     [string]$ExitBy = "click",
+
+    [int]$Repeats = 1,
+
+    [int]$ScrollPercent = 50,
+
+    [switch]$MemGc,
 
     [string]$LogPath = ""
 )
@@ -298,6 +307,19 @@ function Click-Toggle([System.Windows.Automation.AutomationElement]$el, [string]
     Click-At $x $y $why
 }
 
+function Get-RunMetrics([string]$text) {
+    $mFirst = [regex]::Matches($text, "\[FV\] firstBatch count=(\d+) atMs=(\d+) uiDelayMs=(\d+) applyMs=(\d+) enumMs=(\d+)") | Select-Object -Last 1
+    $mEnum = [regex]::Matches($text, "\[FV\] enum done count=(\d+) enumMs=(\d+) error=(\S+)") | Select-Object -Last 1
+    $mFeed = [regex]::Matches($text, "\[FV\] feed done shown=(\d+) batches=(\d+) firstPaintMs=(\d+) feedDoneMs=(\d+) uiApplyMaxMs=(\d+) icons requested=(\d+) loaded=(\d+) failed=(\d+)") | Select-Object -Last 1
+    $mHb = [regex]::Matches($text, "\[FV\] heartbeat feed maxGapMs=(\d+) samples=(\d+)") | Select-Object -Last 1
+    $line = "runMetrics"
+    if ($mFirst) { $line += " firstBatch=$($mFirst.Groups[1].Value)@$($mFirst.Groups[2].Value)ms uiDelay=$($mFirst.Groups[3].Value)ms" }
+    if ($mEnum) { $line += " enumMs=$($mEnum.Groups[2].Value) count=$($mEnum.Groups[1].Value)" }
+    if ($mFeed) { $line += " feedDoneMs=$($mFeed.Groups[4].Value) batches=$($mFeed.Groups[2].Value) uiApplyMax=$($mFeed.Groups[5].Value)ms" }
+    if ($mHb) { $line += " hbGap=$($mHb.Groups[1].Value)ms/$($mHb.Groups[2].Value)" }
+    return $line
+}
+
 $results = New-Object System.Collections.Generic.List[string]
 function Add-Result([string]$line) {
     $results.Add($line)
@@ -308,6 +330,7 @@ function Add-Result([string]$line) {
 Set-Content -Path $resultFile -Value "mode=$Mode dir=$Dir expect=$Expect log=$LogPath" -Encoding UTF8
 
 $argString = "--mode $Mode --transparent 1 --fill work --dir `"$Dir`" --log `"$LogPath`""
+if ($MemGc) { $argString += " --memgc 1" }
 $aumid = "$($pkg.PackageFamilyName)!App"
 $processId = [DemoLauncher]::Activate($aumid, $argString)
 $proc = Get-Process -Id ([int]$processId)
@@ -419,6 +442,24 @@ if ($mHb) {
 }
 else { Add-Result "FAIL heartbeat: 未找到心跳汇总"; $fail++ }
 
+# 2b) 同一会话内重复加载（同缓存、同进程状态），用于性能口径复测
+if ($Repeats -gt 1) {
+    Add-Result ("run1: " + (Get-RunMetrics (Read-Log)))
+    $feedCount = ([regex]::Matches((Read-Log), "\[FV\] feed done")).Count
+    $reloadBtn = Find-ByName $scope "重新枚举"
+    if (-not $reloadBtn) { Add-Result "FAIL repeat: UIA 未找到“重新枚举”"; $fail++ }
+    else {
+        for ($k = 2; $k -le $Repeats; $k++) {
+            Click-Element $reloadBtn
+            $okRun = Wait-LogCount "\[FV\] feed done" ($feedCount + 1) 30000
+            if (-not $okRun) { Add-Result "FAIL repeat ${k}: 未完成再一次枚举/喂入"; $fail++; break }
+            $feedCount++
+            Start-Sleep -Milliseconds 500
+            Add-Result ("run${k}: " + (Get-RunMetrics (Read-Log)))
+        }
+    }
+}
+
 # 3) 文件页内点击透明开关（真实点击证明 UI 可交互；再打开恢复透明）
 if ($trans) {
     Click-Toggle $trans "transparency off"
@@ -437,9 +478,12 @@ if ($list) {
     Add-Result "list found: name='$($list.Current.Name)' class='$($list.Current.ClassName)'"
     try {
         $sp = $list.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern)
-        $sp.SetScrollPercent(-1, 50)
-        Add-Result "scroll: SetScrollPercent(horizontal=-1, vertical=50) ok"
-        Start-Sleep -Milliseconds 2400
+        $settleBefore = ([regex]::Matches((Read-Log), "\[FV\] view\(settle\)")).Count
+        $sp.SetScrollPercent(-1, $ScrollPercent)
+        Add-Result "scroll: SetScrollPercent(horizontal=-1, vertical=$ScrollPercent) ok"
+        $okSettle = Wait-LogCount "\[FV\] view\(settle\)" ($settleBefore + 1) 8000
+        Add-Result "scroll: settle log received=$okSettle"
+        Start-Sleep -Milliseconds 300
         $t2 = Read-Log
         $mView = [regex]::Matches($t2, "\[FV\] view\(settle\) first=(-?\d+) last=(-?\d+) realized=(\d+) shown=(\d+)") | Select-Object -Last 1
         if ($mView) {

@@ -755,3 +755,42 @@ insets: left=0 top=0 right=0 bottom=72px(48dip)
 4. **图标并发 8 路是队列上限，不是在途取消**：已被回收的项在开始前会因 generation/CTS 跳过；已开始的 Shell 调用无法强制取消，只能完成后丢弃，失败计入 `failed`，字形仍在。
 5. **本版未做**：排序、分组、右键菜单、拖放、搜索/过滤、缩略图大图质量（只取 32 px）、多目录并发枚举（调研建议可 8 路并发，本版单目录）、网络路径超时/断线重连、文件变更实时刷新、列头点击排序、键盘快捷键。
 6. **覆盖限制**：本机只有 1 块屏，未覆盖多显示器/副屏异 DPI；未在 100k 上跑 topmost（10k 已覆盖 topmost），未在 10k 上跑 desktoppane（100k 已覆盖 desktoppane）；workerw 只做了“点击失败”对照。
+
+## 13. NativeAOT 一级路线验证（2026-11-08）
+
+目标：把 demo 宿主改成 NativeAOT 发布（.NET 10 + CsWinRT 2.2），验证能否编译/启动/功能等价，并给出内存对比。
+细节数字与逐项证据见 [OPTIMIZATION.md](OPTIMIZATION.md) 第 3 节。
+
+### 13.1 构建
+
+```
+msbuild ...\WinUI2Demo.csproj /restore /t:Publish /p:Platform=x64 /p:Configuration=Release `
+  /p:RuntimeIdentifier=win-x64 /p:SelfContained=true /p:PublishAot=true /p:PublishDir=...\artifacts\aot\
+```
+
+- 编译通过（ILCompiler 生成原生代码），产物 `WinUI2Demo.exe` 7.02 MB；`WinUI2Demo.dll` / `WinRT.Runtime.dll` / `Microsoft.Windows.SDK.NET.dll` 不再需要。
+- **坑（已解决）**：AOT publish 不带 `*.xbf`，必须从普通构建补齐；否则页面 XAML 解析失败。
+
+### 13.2 功能（包内运行）
+
+- 通过：启动与包身份、WinUI2 控件激活、`DesktopWindowXamlSource.AttachToWindow`(hr=0)、`IXamlSourceTransparency`（set/readback=True）、Frame/Page 进入-返回-再进入、FileViewPage 100k 枚举与滚动、页内透明开关、Ctrl+F4 退出、透明像素采样四组全过。
+- **未通过/差异**：AOT 下 `FindScrollViewer` 递归找不到 ListView 的 ScrollViewer（`Loaded`、`LayoutUpdated` 都触发过），`[FV] scrollviewer attached` 不出现，脚本的 scroll-settle 断言因此 FAIL。用独立 UIA 探针复核：滚动本身正常（`SetScrollPercent 0→100` 生效，`realized=38`）。属观测缺口，不影响交互。
+- 失败路线（如实记录）：未打包直跑 AOT exe 时 `XamlControlsResources` / `InfoBar` 报 `hr=0x80040154`（REGDB_E_CLASSNOTREG）。这是 WinRT 激活需要包注册，塞进已注册的 loose 布局后全部正常，不是 AOT 限制。
+
+### 13.3 内存（`--memgc 1`，100k，desktoppane）
+
+| 场景 | CoreCLR WS/Private | AOT WS/Private |
+| --- | --- | --- |
+| 空载 | 94.1 / 24.2 MB | 56.0 / 15.9 MB |
+| 100k feedDone | 184.7 / 89.5 | 148.9 / 82.8 |
+| 图标 settle | 191.0 / 96.7 | 151.6 / 87.8 |
+| 二次加载 feedDone | 233.4 / 138.9 | 189.3 / 125.4 |
+
+- 托管 **42.76 MB（AOT）vs 42.80 MB（CoreCLR）**：AOT 不改变条目模型，自持仍 ≈42.4 MB，未达 <10 MB 目标。
+- GC：pauseΔ 115 ms vs 204 ms。
+
+### 13.4 判定与推荐
+
+- 一级路线**未失败**（能跑 + 功能等价），按既定路线**不启动二级 C++/WinRT 宿主**。
+- 但 AOT 只降低运行时开销，不能解决 100k 的自持内存；且打包需手工补 XBF、滚动观测 hook 在 AOT 下失效。
+- **推荐**：交付继续用 CoreCLR；下一轮把优化放在条目模型瘦身（字符串驻留/前缀去重、图标缓存上限、枚举缓冲复用）。

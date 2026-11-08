@@ -1,0 +1,47 @@
+﻿[21:19:31.270] === WinUI2Demo ===
+[21:19:31.292] pid=7400 os=Microsoft Windows NT 10.0.26300.0
+[21:19:31.292] RoInitialize(STA) => hr=0x00000001
+[21:19:31.298] [PKG] Package.Current fullName=WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4 family=WinUI2Demo_p06pf12qzbwg4
+[21:19:31.313] mode=topmost transparent=False selftest=False
+[21:19:31.405] WindowsXamlManager.InitializeForCurrentThread => True
+[21:19:31.406] Window.Current => Windows.UI.Xaml.Window
+[21:19:31.406] CoreWindow.GetForCurrentThread => Windows.UI.Core.CoreWindow
+[21:19:31.406] [CoreWindowInterop] hwnd=0x5507A0
+[21:19:31.440] [WINUI2] XamlControlsResources merged into Application.Resources
+[21:19:31.441] [WINUI2] resource NavigationViewContentBackground => Windows.UI.Xaml.Media.Brush
+[21:19:31.445] [WINUI2] resource NavigationViewDefaultBackground lookup failed: COMException
+[21:19:31.446] [WINUI2] resource ApplicationPageBackgroundThemeBrush => Windows.UI.Xaml.Media.Brush
+[21:19:31.446] [RegisterClass] host atom=50011 lastErr=0
+[21:19:31.448] [CreateWindow] host hwnd=0x3E0792 exStyle=0x200088 lastErr=0
+[21:19:31.466] [DWS] created=True
+[21:19:31.474] [DWS] AttachToWindow(host) => 0x00000000
+[21:19:31.474] [DWS] island hwnd=0x2208D4
+[21:19:31.511] [PAGE-A] ctor instance=#1 cacheMode=Disabled
+[21:19:31.512] [PAGE-A] OnNavigatedTo #1 mode=New param='start' backStack=0 canGoBack=False
+[21:19:31.512] [DEMO] DemoShell created, content=WinUI2Demo.PageA backStack=0 canGoBack=False
+[21:19:31.516] [MEM] tag=idle items=0 ws=53.7MB private=13.9MB peakWs=53.7MB managed=0.98MB gcDelta=0/0/0 pauseDelta=0.0ms pauseTotal=0.0ms estModel=0.00MB estIcons=0.00MB bufferPeak=0
+[21:19:31.516] [DWS] Content set
+[21:19:31.517] [DWS] island sized to 1120x640
+[21:19:31.518] [XST] set_IsBackgroundTransparent(True) => hr=0x00000000 readback=True
+[21:19:31.518] host dpi=144 coreHwnd=0x5507A0 xamlHwnd=0x2208D4
+[21:19:31.518] [DESK] Progman=0x1015C
+[21:19:31.518] [DESK] Progman children in Z order: SHELLDLL_DefView(0x10160,visible=True,rect=0,0,1920,1080) -> WorkerW(0xB00B16,visible=True,rect=0,0,1920,1080) -> 
+[21:19:31.520] [SHOW] hostVisible=True xamlVisible=True
+[21:19:31.520] [RECT] host screen=(80,60,1200,700)
+[21:19:31.520] [RECT] island screen=(80,60,1200,700) root=0x3E0792
+[21:19:31.520] [HOTKEY] Ctrl+F2=True Ctrl+F3=True Ctrl+F4=True
+[21:19:31.520] [XST] set_IsBackgroundTransparent(False) => hr=0x00000000 readback=False
+[21:19:31.520] [XST] deferred opaque apply after show
+[21:19:31.521] [WS] enum monitors ok=True count=1 SM_CMONITORS=1 MonitorFromWindow(0x3E0792,NEAREST)=10001
+[21:19:31.522] [WS] layout(startup) basis=rcWork target=(0,0,1920,1008) actual=(0,0,1920,1008) parent=0x1000C parentOffsetCorrection=(0,0) lastErr=0
+[21:19:31.522] [RECT] host screen=(0,0,1920,1008)
+[21:19:31.522] [RECT] island screen=(0,0,1920,1008) root=0x3E0792
+[21:19:31.522] [WS] enum monitors ok=True count=1 SM_CMONITORS=1 MonitorFromWindow(0x3E0792,NEAREST)=10001
+[21:19:31.522] [WS] monitor[1/1] hm=10001 device=\\.\DISPLAY1 primary=True dpi=144x144 rcMonitor=(0,0,1920,1080)px rcWork=(0,0,1920,1008)px | dipMonitor=(0,0,1280,720) dipWork=(0,0,1280,672)
+[21:19:31.522] [WS] SPI_GETWORKAREA ok=True rect=(0,0,1920,1008)px dip=(0,0,1280,672) equalCurrentRcWork=True equalPrimaryRcWork=True
+[21:19:31.523] [WS] taskbar ABM_GETTASKBARPOS ok=True edge=下(3) rect=(0,1008,1920,1080)px
+[21:19:31.523] [WS] insets(work vs monitor) px: left=0 top=0 right=0 bottom=72 dipBottom=48
+[21:19:31.523] [WS] verdict(startup) host=(0,0,1920,1008)px layout=铺满工作区(rcWork) bottomOverWork=0px(0dip) desktopMode=False
+[21:19:31.523] [WS] hit(workBottom-10) (960,998) => WinUI2DemoHost.4301bb8fb499479eb248a5f746b954b2 0x3E0792 ours=True root=0x3E0792
+[21:19:31.523] [WS] hit(workBottom+10) (960,1018) => Shell_TrayWnd 0x1013A ours=False root=0x1013A
+[21:19:31.523] [WS] text => 显示器: \\.\DISPLAY1（主屏）1920x1080px @144DPI → 1280x720DIP | rcMonitor=(0,0,1920,1080)px / 0,0,1280,720DIP rcWork=(0,0,1920,1008)px / 0,0,1280,672DIP | SPI_GETWORKAREA=(0,0,1920,1008)px ok=True 与当前屏rcWork一致=True 任务栏边=下 rect=(0,1008,1920,1080)px | 本次布局: 铺满工作区（host=(0,0,1920,1008)px）；置顶态：宿主为 topmost，但任务栏仍在最上层 → 可见范围≈工作区

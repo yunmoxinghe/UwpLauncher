@@ -347,4 +347,64 @@ namespace WinUI2Demo
             }
         }
     }
+
+    /// <summary>
+    /// 内存基线探针：一行日志同时记录整进程（WS/Private/PeakWS）、托管堆、GC 次数与暂停，
+    /// 以及调用方给的条目模型/图标/枚举缓冲估算。用于优化台账的逐轮对照。
+    /// </summary>
+    internal static class MemProbe
+    {
+        private static readonly Process Proc = Process.GetCurrentProcess();
+        private static double _pauseBaselineMs;
+        private static int _g0Base, _g1Base, _g2Base;
+
+        /// <summary>内存测量专用：打点前强制 GC，得到的 managed 才是“仍存活”的占用。</summary>
+        internal static bool ForceGc;
+
+        /// <summary>每次加载开始时调用，之后 Log 里的 pauseΔ/gcΔ 就是本次加载的增量。</summary>
+        internal static void ResetBaseline()
+        {
+            _pauseBaselineMs = GC.GetTotalPauseDuration().TotalMilliseconds;
+            _g0Base = GC.CollectionCount(0);
+            _g1Base = GC.CollectionCount(1);
+            _g2Base = GC.CollectionCount(2);
+        }
+
+        internal static void Log(string tag, int items, long estModelBytes, int iconsLoaded, int bufferPeakItems)
+        {
+            try
+            {
+                // 先取 GC 统计（探针自己触发的强制 GC 不能算进“枚举+喂入”的暂停/次数）
+                var pauseMs = GC.GetTotalPauseDuration().TotalMilliseconds;
+                var g0 = GC.CollectionCount(0);
+                var g1 = GC.CollectionCount(1);
+                var g2 = GC.CollectionCount(2);
+
+                if (ForceGc)
+                {
+                    GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+                    GC.WaitForPendingFinalizers();
+                    GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+                }
+
+                Proc.Refresh();
+                var ws = Proc.WorkingSet64;
+                var priv = Proc.PrivateMemorySize64;
+                var peakWs = Proc.PeakWorkingSet64;
+                var managed = GC.GetTotalMemory(false);
+                var pauseDelta = pauseMs - _pauseBaselineMs;
+                Program.Log($"[MEM] tag={tag} items={items} " +
+                    $"ws={ws / 1048576.0:F1}MB private={priv / 1048576.0:F1}MB peakWs={peakWs / 1048576.0:F1}MB " +
+                    $"managed={managed / 1048576.0:F2}MB " +
+                    $"gcDelta={g0 - _g0Base}/{g1 - _g1Base}/{g2 - _g2Base} " +
+                    $"pauseDelta={pauseDelta:F1}ms pauseTotal={pauseMs:F1}ms " +
+                    $"estModel={estModelBytes / 1048576.0:F2}MB estIcons={iconsLoaded * 32L * 32L * 4 / 1048576.0:F2}MB " +
+                    $"bufferPeak={bufferPeakItems}");
+            }
+            catch
+            {
+                // 探针失败不影响页面功能
+            }
+        }
+    }
 }

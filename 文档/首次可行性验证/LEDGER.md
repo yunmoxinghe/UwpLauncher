@@ -311,3 +311,23 @@ XAML 内容：左右两列，左列无背景，右列 50% 红（`#80FF0000`）�
 - 冷启动首批曾只有 1 项，已通过“open 后计时 + 最少 30 项”修正。
 - 未做：排序、分组、右键菜单、拖放、搜索、缩略图大图、多目录并发、网络路径超时、实时刷新、键盘快捷键。
 - 未覆盖：多显示器 / 副屏异 DPI；100k 的 topmost、10k 的 desktoppane 未成对跑（各有一条模式覆盖）。
+
+## NativeAOT 一级路线（2026-11-08）
+
+### 做了什么
+
+- 只改构建属性，不改代码：`/t:Publish /p:RuntimeIdentifier=win-x64 /p:SelfContained=true /p:PublishAot=true`，由 VS MSBuild 直接编出原生 exe（7.02 MB）。
+- AOT publish 不带 `*.xbf`，验证时从普通构建补齐后替换进已注册的 loose 布局。
+- 顺带补了一个滚动观测的健壮性改动：`FileList.LayoutUpdated` 也尝试挂载 ScrollViewer（CoreCLR 下无回归，AOT 下仍未挂上，见下）。
+
+### 结论
+
+- **能跑**：包内启动、WinUI2 控件激活、DWS 挂载、`IXamlSourceTransparency`、Frame/Page 导航、FileViewPage 100k 枚举/滚动、页内透明开关、Ctrl+F4 退出全部实测通过；透明像素采样四组 `failures=0`。
+- **内存**：空载 WS/Private 94.1/24.2 → 56.0/15.9 MB；100k feedDone 184.7/89.5 → 148.9/82.8；二次加载 233.4/138.9 → 189.3/125.4。托管 42.80 → 42.76 MB，**自持模型没有变化**，仍 ≈42.4 MB（目标 <10 MB 未达）。GC pauseΔ 204 → 115 ms。
+- **一处差异**：AOT 下 `FindScrollViewer` 返回 null，`[FV] scrollviewer attached` 缺失（UIA 脚本 scroll 断言 FAIL）；独立探针证明滚动本身正常（pct 0→100、realized=38）。
+- 未打包直跑 AOT exe 会因缺包注册报 `0x80040154`；打进 MSIX 后正常，不算 AOT 限制。
+
+### 推荐
+
+- 一级未失败 → 不启动二级 C++/WinRT。交付继续用 CoreCLR（打包简单、已验收）；AOT 作为可选的“低常驻”构建保留。
+- 下一轮内存优化应针对条目模型与图标缓存，而不是运行时。

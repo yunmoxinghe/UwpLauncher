@@ -1,0 +1,65 @@
+﻿[21:18:51.809] === WinUI2Demo ===
+[21:18:51.828] pid=23736 os=Microsoft Windows NT 10.0.26300.0
+[21:18:51.828] RoInitialize(STA) => hr=0x00000001
+[21:18:51.832] [PKG] Package.Current fullName=WinUI2Demo_1.0.0.0_x64__p06pf12qzbwg4 family=WinUI2Demo_p06pf12qzbwg4
+[21:18:51.844] mode=topmost transparent=True selftest=False
+[21:18:51.924] WindowsXamlManager.InitializeForCurrentThread => True
+[21:18:51.924] Window.Current => Windows.UI.Xaml.Window
+[21:18:51.924] CoreWindow.GetForCurrentThread => Windows.UI.Core.CoreWindow
+[21:18:51.924] [CoreWindowInterop] hwnd=0x3009C6
+[21:18:51.953] [WINUI2] XamlControlsResources merged into Application.Resources
+[21:18:51.954] [WINUI2] resource NavigationViewContentBackground => Windows.UI.Xaml.Media.Brush
+[21:18:51.957] [WINUI2] resource NavigationViewDefaultBackground lookup failed: COMException
+[21:18:51.957] [WINUI2] resource ApplicationPageBackgroundThemeBrush => Windows.UI.Xaml.Media.Brush
+[21:18:51.957] [RegisterClass] host atom=50050 lastErr=0
+[21:18:51.958] [CreateWindow] host hwnd=0x4808E4 exStyle=0x200088 lastErr=0
+[21:18:51.968] [DWS] created=True
+[21:18:51.975] [DWS] AttachToWindow(host) => 0x00000000
+[21:18:51.975] [DWS] island hwnd=0x48091C
+[21:18:51.996] [PAGE-A] ctor instance=#1 cacheMode=Disabled
+[21:18:51.996] [PAGE-A] OnNavigatedTo #1 mode=New param='start' backStack=0 canGoBack=False
+[21:18:51.996] [DEMO] DemoShell created, content=WinUI2Demo.PageA backStack=0 canGoBack=False
+[21:18:52.000] [MEM] tag=idle items=0 ws=53.8MB private=14.0MB peakWs=53.8MB managed=0.98MB gcDelta=0/0/0 pauseDelta=0.0ms pauseTotal=0.0ms estModel=0.00MB estIcons=0.00MB bufferPeak=0
+[21:18:52.000] [DWS] Content set
+[21:18:52.001] [DWS] island sized to 1120x640
+[21:18:52.001] [XST] set_IsBackgroundTransparent(True) => hr=0x00000000 readback=True
+[21:18:52.001] host dpi=144 coreHwnd=0x3009C6 xamlHwnd=0x48091C
+[21:18:52.001] [DESK] Progman=0x1015C
+[21:18:52.001] [DESK] Progman children in Z order: SHELLDLL_DefView(0x10160,visible=True,rect=0,0,1920,1080) -> WorkerW(0xB00B16,visible=True,rect=0,0,1920,1080) -> 
+[21:18:52.002] [SHOW] hostVisible=True xamlVisible=True
+[21:18:52.002] [RECT] host screen=(80,60,1200,700)
+[21:18:52.002] [RECT] island screen=(80,60,1200,700) root=0x4808E4
+[21:18:52.003] [HOTKEY] Ctrl+F2=True Ctrl+F3=True Ctrl+F4=True
+[21:18:52.003] [WS] enum monitors ok=True count=1 SM_CMONITORS=1 MonitorFromWindow(0x4808E4,NEAREST)=10001
+[21:18:52.005] [WS] layout(startup) basis=rcWork target=(0,0,1920,1008) actual=(0,0,1920,1008) parent=0x1000C parentOffsetCorrection=(0,0) lastErr=0
+[21:18:52.005] [RECT] host screen=(0,0,1920,1008)
+[21:18:52.005] [RECT] island screen=(0,0,1920,1008) root=0x4808E4
+[21:18:52.005] [WS] enum monitors ok=True count=1 SM_CMONITORS=1 MonitorFromWindow(0x4808E4,NEAREST)=10001
+[21:18:52.005] [WS] monitor[1/1] hm=10001 device=\\.\DISPLAY1 primary=True dpi=144x144 rcMonitor=(0,0,1920,1080)px rcWork=(0,0,1920,1008)px | dipMonitor=(0,0,1280,720) dipWork=(0,0,1280,672)
+[21:18:52.005] [WS] SPI_GETWORKAREA ok=True rect=(0,0,1920,1008)px dip=(0,0,1280,672) equalCurrentRcWork=True equalPrimaryRcWork=True
+[21:18:52.009] [WS] taskbar ABM_GETTASKBARPOS ok=True edge=下(3) rect=(0,1008,1920,1080)px
+[21:18:52.009] [WS] insets(work vs monitor) px: left=0 top=0 right=0 bottom=72 dipBottom=48
+[21:18:52.009] [WS] verdict(startup) host=(0,0,1920,1008)px layout=铺满工作区(rcWork) bottomOverWork=0px(0dip) desktopMode=False
+[21:18:52.009] [WS] hit(workBottom-10) (960,998) => WinUI2DemoHost.aee72fbec33444498d9eb9f3d45ee266 0x4808E4 ours=True root=0x4808E4
+[21:18:52.009] [WS] hit(workBottom+10) (960,1018) => Shell_TrayWnd 0x1013A ours=False root=0x1013A
+[21:18:52.010] [WS] text => 显示器: \\.\DISPLAY1（主屏）1920x1080px @144DPI → 1280x720DIP | rcMonitor=(0,0,1920,1080)px / 0,0,1280,720DIP rcWork=(0,0,1920,1008)px / 0,0,1280,672DIP | SPI_GETWORKAREA=(0,0,1920,1008)px ok=True 与当前屏rcWork一致=True 任务栏边=下 rect=(0,1008,1920,1080)px | 本次布局: 铺满工作区（host=(0,0,1920,1008)px）；置顶态：宿主为 topmost，但任务栏仍在最上层 → 可见范围≈工作区
+[21:19:00.685] [DEMO] PageA -> Navigate(FileViewPage)
+[21:19:00.685] [NAV] Navigating to WinUI2Demo.FileViewPage mode=New backStack=0
+[21:19:00.709] [NAV] Navigated to WinUI2Demo.FileViewPage mode=New content=WinUI2Demo.FileViewPage backStack=1 canGoBack=True
+[21:19:00.709] [PAGE-A] OnNavigatedFrom mode=New
+[21:19:00.709] [FV] page start path='C:\Users\gold\perf-research\data\f100k'
+[21:19:00.814] [FV] firstBatch count=30 atMs=105 uiDelayMs=52 applyMs=0 enumMs=51
+[21:19:00.819] [MEM] tag=firstBatch items=30 ws=87.5MB private=35.4MB peakWs=87.5MB managed=9.32MB gcDelta=2/1/0 pauseDelta=22.8ms pauseTotal=22.8ms estModel=0.01MB estIcons=0.00MB bufferPeak=30
+[21:19:00.819] [FV] batch n=1 count=30 shown=30 scanned=30 enumMs=51 uiDelayMs=52 applyMs=0
+[21:19:00.835] [FV] firstRealized name='file_000000.dat' atMs=126
+[21:19:01.207] [FV] batch n=2 count=20000 shown=20030 scanned=20030 enumMs=109 uiDelayMs=383 applyMs=4
+[21:19:01.213] [FV] batch n=3 count=20000 shown=40030 scanned=40030 enumMs=191 uiDelayMs=306 applyMs=5
+[21:19:01.216] [FV] batch n=4 count=20000 shown=60030 scanned=60030 enumMs=256 uiDelayMs=246 applyMs=2
+[21:19:01.218] [FV] batch n=5 count=20000 shown=80030 scanned=80030 enumMs=348 uiDelayMs=157 applyMs=1
+[21:19:01.220] [FV] batch n=6 count=19970 shown=100000 scanned=100000 enumMs=436 uiDelayMs=71 applyMs=2
+[21:19:01.220] [FV] enum done count=100000 enumMs=436 error=none scanned=100000
+[21:19:01.220] [FV] feed done shown=100000 batches=6 firstPaintMs=105 feedDoneMs=511 uiApplyMaxMs=5 icons requested=8 loaded=0 failed=0
+[21:19:01.220] [FV] heartbeat feed maxGapMs=346 samples=2
+[21:19:01.226] [MEM] tag=feedDone items=100000 ws=148.0MB private=87.3MB peakWs=148.1MB managed=45.58MB gcDelta=10/5/2 pauseDelta=152.9ms pauseTotal=152.9ms estModel=41.58MB estIcons=0.00MB bufferPeak=20000
+[21:19:03.237] [FV] icons settle requested=39 loaded=39 failed=0 realized=51
+[21:19:03.240] [MEM] tag=iconsSettle items=100000 ws=152.4MB private=90.5MB peakWs=152.4MB managed=43.24MB gcDelta=11/6/3 pauseDelta=186.2ms pauseTotal=186.2ms estModel=41.58MB estIcons=0.15MB bufferPeak=20000

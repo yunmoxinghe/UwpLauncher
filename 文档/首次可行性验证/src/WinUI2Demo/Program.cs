@@ -272,6 +272,9 @@ namespace WinUI2Demo
             var dir = GetArgValue(args, "--dir");
             if (!string.IsNullOrWhiteSpace(dir))
                 FileViewDefaultPath = dir!;
+
+            // --memgc 1：内存测量专用，探针打点前强制 GC，避免把未回收垃圾算进“自持内存”
+            MemProbe.ForceGc = GetArgValue(args, "--memgc") == "1";
         }
 
         private static string? GetArgValue(string[] args, string name)
@@ -507,6 +510,7 @@ namespace WinUI2Demo
                 AttachFrameLogging(_frame);
                 Log($"[DEMO] DemoShell created, content={_frame.Content?.GetType().FullName ?? "NULL"} " +
                     $"backStack={_frame.BackStackDepth} canGoBack={_frame.CanGoBack}");
+                MemProbe.Log("idle", 0, 0, 0, 0);
                 return shell;
             }
             catch (Exception ex)

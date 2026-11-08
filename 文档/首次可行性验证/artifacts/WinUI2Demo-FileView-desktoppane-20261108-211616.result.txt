@@ -1,0 +1,27 @@
+﻿mode=desktoppane dir=C:\Users\gold\perf-research\data\f100k expect=100000 log=C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\artifacts\WinUI2Demo-FileView-desktoppane-20261108-211616.log
+pid=3480 aumid=WinUI2Demo_p06pf12qzbwg4!App
+hostHwnd=0x2709AA
+uia scope: name='WinUI2DemoHost' class='WinUI2DemoHost.5d99e48f14be4600bf7b8adffbd25c64'
+foreground ok=False
+found: fileView=True transparency=True quit=True
+PASS enter: 真实点击进入 FileViewPage
+PASS feed: 枚举/喂入完成
+firstBatch count=1 atMs=716 uiDelayMs=22 applyMs=4 enumMs=675
+firstRealized name=file_000000.dat atMs=831
+enum done count=100000 enumMs=1299 error=none
+feed done shown=100000 batches=21 firstPaintMs=716 feedDoneMs=1463 uiApplyMaxMs=37 iconsReq=10 iconsLoadedAtDone=0 iconsFailedAtDone=0
+heartbeat feed maxGapMs=333 samples=11
+PASS heartbeat: 喂入期间 UI 最大停顿 333ms
+PASS transparency: 文件页内透明关/开均生效
+list found: name='文件列表' class='ListView'
+scroll: SetScrollPercent(horizontal=-1, vertical=100) ok
+scroll: settle log received=True
+view settle first=99992 last=99999 realized=114 shown=100000
+PASS scroll: 已滚动到中段（first=99992）
+PASS virtualization: 容器 realized=114（远小于列表项数）
+heartbeat scroll maxGapMs=231 samples=14
+PASS back: 返回 PageA 成功
+PASS reenter: 第二次进入文件页并完成枚举
+PASS quit: Ctrl+F4 宏键在文件页仍生效
+process exited=True
+RESULT mode=desktoppane failures=0

@@ -1,0 +1,23 @@
+mode=desktoppane dir=C:\Users\gold\perf-research\data\f100k expect=100000 log=C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\artifacts\WinUI2Demo-FileView-desktoppane-20261108-205421.log
+pid=20224 aumid=WinUI2Demo_p06pf12qzbwg4!App
+hostHwnd=0x130A0C
+uia scope: name='WinUI2DemoHost' class='WinUI2DemoHost.282d2a83d7564a6e8ad8fc58c42913d4'
+foreground ok=False
+found: fileView=True transparency=True quit=True
+RETRY nav: 补点一次文件视图入口
+FAIL enter: 未收到 FileViewPage 导航
+FAIL feed: 30s 内未完成枚举/喂入
+FAIL firstBatch: 未找到首批日志
+FAIL firstRealized: 没有容器实现日志
+FAIL enum: 未找到枚举完成日志
+FAIL feed: 未找到 feed done 明细
+FAIL heartbeat: 未找到心跳汇总
+run1: runMetrics
+FAIL repeat: UIA 未找到
+FAIL transparency: toggled 日志次数不足
+FAIL scroll: UIA 未找到 FileList
+FAIL back: 未返回 PageA
+FAIL reenter: 重新进入失败（nav=False feed=False）
+FAIL quit: 未收到 close requested（宏键失效）
+cleanup: killed leftover pid=20224
+RESULT mode=desktoppane failures=13

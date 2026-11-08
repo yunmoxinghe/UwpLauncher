@@ -71,6 +71,7 @@ namespace WinUI2Demo
         private long _feedDoneMs;
         private long _uiApplyMaxMs;
         private int _batchCount;
+        private int _maxBatchItems;
         private int _realized;
         private int _enumScanned;
         private int _iconRequested;
@@ -80,11 +81,14 @@ namespace WinUI2Demo
         private long _hbMaxGapMs;
         private int _hbSamples;
         private long _lastViewLogTicks;
+        private int _attachAttempts;
 
         public FileViewPage()
         {
             InitializeComponent();
             FileList.Loaded += (_, __) => AttachScrollViewer();
+            // NativeAOT 下实测 Loaded 不一定会触发，布局变化时也尝试挂载
+            FileList.LayoutUpdated += OnListLayoutUpdated;
         }
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -156,6 +160,7 @@ namespace WinUI2Demo
             _feedDoneMs = 0;
             _uiApplyMaxMs = 0;
             _batchCount = 0;
+            _maxBatchItems = 0;
             _realized = 0;
             _enumScanned = 0;
             _iconRequested = 0;
@@ -169,6 +174,7 @@ namespace WinUI2Demo
             MetricsText.Text = $"路径: {path} | 枚举中…";
             StatusText.Text = "枚举中… 后台线程 FindFirstFileExW（FindExInfoBasic + LARGE_FETCH）";
 
+            MemProbe.ResetBaseline();
             StartTimers();
 
             if (!Directory.Exists(path))
@@ -253,6 +259,8 @@ namespace WinUI2Demo
             Items.AddRangeSilent(batch.Items);
             Items.RaiseReset();
             _batchCount = batch.BatchIndex;
+            if (batch.Items.Count > _maxBatchItems)
+                _maxBatchItems = batch.Items.Count;
 
             var applyMs = (long)((Stopwatch.GetTimestamp() - applyStart) * 1000.0 / Stopwatch.Frequency);
             if (applyMs > _uiApplyMaxMs)
@@ -263,6 +271,8 @@ namespace WinUI2Demo
                 _firstPaintMs = PageElapsedMs();
                 Program.Log($"[FV] firstBatch count={batch.Items.Count} atMs={_firstPaintMs} " +
                     $"uiDelayMs={uiDelayMs} applyMs={applyMs} enumMs={batch.EnumElapsedMs}");
+                MemProbe.Log("firstBatch", Items.Count, EstimateModelBytes(),
+                    Volatile.Read(ref _iconLoaded), _maxBatchItems);
             }
 
             Program.Log($"[FV] batch n={batch.BatchIndex} count={batch.Items.Count} shown={Items.Count} " +
@@ -297,6 +307,8 @@ namespace WinUI2Demo
                 $"icons requested={_iconRequested} loaded={Volatile.Read(ref _iconLoaded)} " +
                 $"failed={Volatile.Read(ref _iconFailed)}");
             Program.Log($"[FV] heartbeat feed maxGapMs={_hbMaxGapMs} samples={_hbSamples}");
+            MemProbe.Log("feedDone", Items.Count, EstimateModelBytes(),
+                Volatile.Read(ref _iconLoaded), _maxBatchItems);
 
             _progressTimer?.Stop();
             ResetHeartbeatWindow();
@@ -308,6 +320,8 @@ namespace WinUI2Demo
                 Program.Log($"[FV] icons settle requested={_iconRequested} " +
                     $"loaded={Volatile.Read(ref _iconLoaded)} failed={Volatile.Read(ref _iconFailed)} " +
                     $"realized={_realized}");
+                MemProbe.Log("iconsSettle", Items.Count, EstimateModelBytes(),
+                    Volatile.Read(ref _iconLoaded), _maxBatchItems);
                 _iconSettleTimer?.Stop();
                 _iconSettleTimer = null;
             };
@@ -335,6 +349,31 @@ namespace WinUI2Demo
             StatusText.Text = $"枚举中… 后台已扫描 {scanned} 项 / 已显示 {Items.Count} 项 · " +
                 $"批次 {_batchCount} · 首批 {(_firstPaintMs > 0 ? _firstPaintMs + " ms" : "未上屏")}";
             MetricsText.Text = $"路径: {PathBox.Text} | UI 最大停顿 {_hbMaxGapMs} ms/{_hbSamples} 次";
+        }
+
+        /// <summary>
+        /// 条目模型内存估算：采样 2000 项取平均后乘总数。
+        /// FileEntry 对象 ≈ 112 字节（对象头 + 9 个字段 + PropertyChanged）；集合数组槽 8 字节；
+        /// 6 个字符串各自 20 字节头（对象头 + 长度/哈希），内容 UTF-16 2 字节/字符。
+        /// </summary>
+        private long EstimateModelBytes()
+        {
+            var count = Items.Count;
+            if (count == 0)
+                return 0;
+
+            var sample = Math.Min(2000, count);
+            long chars = 0;
+            for (var i = 0; i < sample; i++)
+            {
+                var e = Items[i];
+                chars += e.Name.Length + e.FullPath.Length + e.SizeText.Length +
+                         e.DateText.Length + e.TypeText.Length + e.Glyph.Length;
+            }
+
+            var avgChars = chars / (double)sample;
+            var perItem = avgChars * 2.0 + 112.0 + 8.0 + 6 * 20.0;
+            return (long)(perItem * count);
         }
 
         private long PageElapsedMs()
@@ -475,9 +514,22 @@ namespace WinUI2Demo
             _scrollViewer = FindScrollViewer(FileList);
             if (_scrollViewer is not null)
             {
+                FileList.LayoutUpdated -= OnListLayoutUpdated;
                 _scrollViewer.ViewChanged += Scroll_ViewChanged;
                 Program.Log("[FV] scrollviewer attached");
+                return;
             }
+
+            // Loaded 时模板可能还没展开（NativeAOT 下实测会遇到），下一次布局再试
+            if (_attachAttempts++ < 2)
+                Program.Log($"[FV] scrollviewer not found (attempt={_attachAttempts})");
+            FileList.LayoutUpdated -= OnListLayoutUpdated;
+            FileList.LayoutUpdated += OnListLayoutUpdated;
+        }
+
+        private void OnListLayoutUpdated(object? sender, object e)
+        {
+            AttachScrollViewer();
         }
 
         private void Scroll_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
@@ -500,6 +552,8 @@ namespace WinUI2Demo
                 {
                     LogView("settle");
                     Program.Log($"[FV] heartbeat scroll maxGapMs={_hbMaxGapMs} samples={_hbSamples}");
+                    MemProbe.Log("scrollSettle", Items.Count, EstimateModelBytes(),
+                        Volatile.Read(ref _iconLoaded), _maxBatchItems);
                     _scrollSummaryTimer?.Stop();
                     _scrollSummaryTimer = null;
                 };

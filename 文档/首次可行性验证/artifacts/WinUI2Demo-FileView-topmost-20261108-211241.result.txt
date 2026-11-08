@@ -1,0 +1,25 @@
+﻿mode=topmost dir=C:\Users\gold\perf-research\data\f10k expect=10000 log=C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\artifacts\WinUI2Demo-FileView-topmost-20261108-211241.log
+pid=25380 aumid=WinUI2Demo_p06pf12qzbwg4!App
+hostHwnd=0x91058
+uia scope: name='WinUI2DemoHost' class='WinUI2DemoHost.31f38c6bbd83403dac8a944101196aec'
+foreground ok=False
+found: fileView=True transparency=True quit=True
+PASS enter: 真实点击进入 FileViewPage
+PASS feed: 枚举/喂入完成
+firstBatch count=30 atMs=141 uiDelayMs=44 applyMs=0 enumMs=94
+firstRealized name=file_000000.dat atMs=190
+enum done count=10000 enumMs=131 error=none
+feed done shown=10000 batches=2 firstPaintMs=141 feedDoneMs=146 uiApplyMaxMs=0 iconsReq=0 iconsLoadedAtDone=0 iconsFailedAtDone=0
+heartbeat feed maxGapMs=123 samples=1
+PASS heartbeat: 喂入期间 UI 最大停顿 123ms
+PASS transparency: 文件页内透明关/开均生效
+list found: name='文件列表' class='ListView'
+scroll: SetScrollPercent(horizontal=-1, vertical=50) ok
+scroll: settle log received=False
+FAIL scroll: 未收到 view(settle) 日志
+FAIL scroll: 未收到滚动心跳汇总
+FAIL back: 未返回 PageA
+FAIL reenter: PageA 的
+PASS quit: Ctrl+F4 宏键在文件页仍生效
+process exited=True
+RESULT mode=topmost failures=4

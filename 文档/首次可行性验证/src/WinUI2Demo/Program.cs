@@ -92,6 +92,7 @@ namespace WinUI2Demo
         private static readonly WNDPROC s_wndProc = new(WndProc);
 
         private static StreamWriter _log = StreamWriter.Null;
+        private static readonly object s_logLock = new();
         private static string _mode = "topmost";
         private static bool _transparent = true;
         private static bool _selftest;
@@ -207,6 +208,43 @@ namespace WinUI2Demo
         [DllImport("user32.dll")]
         private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
+        // ---- 遮挡检测 / 工作集修剪（R8）----
+        private const int GA_ROOT = 2;
+        private const uint GW_HWNDPREV = 3u;
+
+        internal static event Action<bool, string>? OcclusionChanged;
+        internal static bool IsHostOccluded => s_occState ?? false;
+        /// <summary>性能口径复测时可关闭（--occ 0）：避免 IDE/终端窗口盖住桌面时干扰枚举批次。</summary>
+        internal static bool OcclusionEnabled = true;
+
+        private static System.Threading.Timer? s_occTimer;
+        private static int s_occBusy;
+        private static bool? s_occState;
+
+        [DllImport("user32.dll")]
+        private static extern nint GetAncestor(nint hwnd, uint flags);
+
+        [DllImport("user32.dll")]
+        private static extern nint GetWindow(nint hwnd, uint cmd);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsWindowVisible(nint hwnd);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsIconic(nint hwnd);
+
+        [DllImport("user32.dll")]
+        private static extern nint GetForegroundWindow();
+
+        [DllImport("user32.dll", EntryPoint = "GetWindowRect")]
+        private static extern bool GetWindowRect(nint hwnd, nint lprc);
+
+        [DllImport("user32.dll", EntryPoint = "GetClassNameW")]
+        private static extern int GetClassName(nint hwnd, nint buf, int max);
+
+        [DllImport("psapi.dll")]
+        private static extern bool EmptyWorkingSet(nint hProcess);
+
         [STAThread]
         private static int Main(string[] args)
         {
@@ -275,6 +313,9 @@ namespace WinUI2Demo
 
             // --memgc 1：内存测量专用，探针打点前强制 GC，避免把未回收垃圾算进“自持内存”
             MemProbe.ForceGc = GetArgValue(args, "--memgc") == "1";
+
+            // --occ 0：性能/内存口径复测时关闭遮挡降级，避免桌面被 IDE/终端盖住时干扰枚举批次
+            OcclusionEnabled = GetArgValue(args, "--occ") != "0";
         }
 
         private static string? GetArgValue(string[] args, string name)
@@ -345,6 +386,7 @@ namespace WinUI2Demo
 
                 ApplyLayout("startup");
                 UpdateWorkspace("startup");
+                StartOcclusionWatch();
 
                 RunInteractiveLoop();
             }
@@ -1260,6 +1302,185 @@ namespace WinUI2Demo
                 SET_WINDOW_POS_FLAGS.SWP_FRAMECHANGED);
         }
 
+        /// <summary>
+        /// 遮挡监测：600 ms 轮询。判定依据（写明口径，避免“看起来被盖住”的推断）：
+        /// 1) 宿主本身不可见/最小化 → occluded；
+        /// 2) 取宿主顶层祖先，按 Z 序向上（GW_HWNDPREV）遍历所有更高层窗口，
+        ///    任一可见窗口与宿主矩形交集 ≥ 宿主面积 95% → occluded；
+        /// 3) 只做矩形覆盖，不做逐像素/合成层（DWM cloaked）分析；多个窗口拼合覆盖不合并计算。
+        /// </summary>
+        private static void StartOcclusionWatch()
+        {
+            if (!OcclusionEnabled)
+            {
+                Log("[OCC] disabled by --occ 0");
+                return;
+            }
+
+            if (s_occTimer is not null)
+                return;
+            s_occTimer = new System.Threading.Timer(_ => PollOcclusion(), null, 600, 600);
+            Log("[OCC] watch started intervalMs=600 rule=anyWindowAboveCoverHost95%");
+        }
+
+        private static void PollOcclusion()
+        {
+            if (Interlocked.Exchange(ref s_occBusy, 1) == 1)
+                return;
+
+            try
+            {
+                var occluded = ComputeOccluded(out var reason);
+                if (s_occState is null || s_occState.Value != occluded)
+                {
+                    s_occState = occluded;
+                    var fg = (nint)GetForegroundWindow();
+                    Log($"[OCC] occluded={(occluded ? 1 : 0)} reason={reason} fg=0x{fg:X} fgClass={ClassNameOf(fg)}");
+                    OcclusionChanged?.Invoke(occluded, reason);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"[OCC] poll failed {ex.GetType().Name}: {ex.Message}");
+            }
+            finally
+            {
+                Interlocked.Exchange(ref s_occBusy, 0);
+            }
+        }
+
+        private static bool ComputeOccluded(out string reason)
+        {
+            reason = "host-missing";
+            if (_host.IsNull)
+                return false;
+
+            var host = (nint)_host.Value;
+            var root = GetAncestor(host, GA_ROOT);
+            if (root == 0)
+                root = host;
+
+            if (!IsWindowVisible(root))
+            {
+                reason = "host-hidden";
+                return true;
+            }
+
+            if (IsIconic(root))
+            {
+                reason = "host-minimized";
+                return true;
+            }
+
+            RECT32 hostRect;
+            if (!GetWindowRect(host, (nint)(&hostRect)))
+            {
+                reason = "host-rect-failed";
+                return false;
+            }
+
+            var hostArea = (long)(hostRect.Right - hostRect.Left) * (hostRect.Bottom - hostRect.Top);
+            if (hostArea <= 0)
+            {
+                reason = "host-area-zero";
+                return false;
+            }
+
+            // 前景窗口单独判一次：TopMost 窗口和普通窗口处在不同 Z 序带，
+            // GW_HWNDPREV 只会在同一带内游走，TopMost 的覆盖窗必须直接从前景句柄看。
+            var fg = GetForegroundWindow();
+            if (fg != 0 && fg != host && IsWindowVisible(fg) && !IsShellDesktopClass(fg))
+            {
+                RECT32 fgRect;
+                if (GetWindowRect(fg, (nint)(&fgRect)))
+                {
+                    var fw = Math.Min(fgRect.Right, hostRect.Right) - Math.Max(fgRect.Left, hostRect.Left);
+                    var fh = Math.Min(fgRect.Bottom, hostRect.Bottom) - Math.Max(fgRect.Top, hostRect.Top);
+                    if (fw > 0 && fh > 0)
+                    {
+                        var fgCovered = (long)fw * fh;
+                        if (fgCovered >= hostArea * 95 / 100)
+                        {
+                            reason = $"foreground-covers[{ClassNameOf(fg)}] cover={fgCovered * 100 / hostArea}%";
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            var w = GetWindow(root, GW_HWNDPREV);
+            var probes = 0;
+            while (w != 0 && probes++ < 64)
+            {
+                if (IsWindowVisible(w) && !IsShellDesktopClass(w))
+                {
+                    RECT32 r;
+                    if (GetWindowRect(w, (nint)(&r)))
+                    {
+                        var iw = Math.Min(r.Right, hostRect.Right) - Math.Max(r.Left, hostRect.Left);
+                        var ih = Math.Min(r.Bottom, hostRect.Bottom) - Math.Max(r.Top, hostRect.Top);
+                        if (iw > 0 && ih > 0)
+                        {
+                            var covered = (long)iw * ih;
+                            if (covered >= hostArea * 95 / 100)
+                            {
+                                reason = $"covered-by[{ClassNameOf(w)}] cover={covered * 100 / hostArea}%";
+                                return true;
+                            }
+                        }
+                    }
+                }
+
+                w = GetWindow(w, GW_HWNDPREV);
+            }
+
+            reason = "clear";
+            return false;
+        }
+
+        private static bool IsShellDesktopClass(nint hwnd)
+        {
+            var cls = ClassNameOf(hwnd);
+            return cls is "Progman" or "WorkerW" or "Shell_TrayWnd" or "Shell_SecondaryTrayWnd";
+        }
+
+        private static unsafe string ClassNameOf(nint hwnd)
+        {
+            if (hwnd == 0)
+                return "";
+
+            var buf = stackalloc char[128];
+            var n = GetClassName(hwnd, (nint)buf, 128);
+            if (n <= 0)
+                return "";
+            return new string(buf, 0, n);
+        }
+
+        /// <summary>
+        /// ④ 的收尾动作：先强制 GC，再 EmptyWorkingSet。
+        /// 注意：EmptyWorkingSet 只把页面移出工作集，private bytes 基本不变——不能把 WS 下降说成“省了内存”。
+        /// </summary>
+        internal static void TrimWorkingSet(string tag)
+        {
+            var p = Process.GetCurrentProcess();
+            p.Refresh();
+            var wsBefore = p.WorkingSet64;
+            var priv = p.PrivateMemorySize64;
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            p.Refresh();
+            var wsAfterGc = p.WorkingSet64;
+            var ok = EmptyWorkingSet(p.Handle);
+            p.Refresh();
+
+            Log($"[MEM] tag={tag} wsBefore={wsBefore / 1048576.0:F1}MB wsAfterGc={wsAfterGc / 1048576.0:F1}MB " +
+                $"wsAfterTrim={p.WorkingSet64 / 1048576.0:F1}MB private={priv / 1048576.0:F1}MB " +
+                $"managed={GC.GetTotalMemory(false) / 1048576.0:F2}MB emptyOk={ok} note=EmptyWorkingSet只降WS");
+        }
+
         private static void ShowWindows()
         {
             if (!_desktopMode)
@@ -1449,8 +1670,12 @@ namespace WinUI2Demo
 
         internal static void Log(string message)
         {
-            var line = $"[{DateTime.Now:HH:mm:ss.fff}] {message}";
-            _log.WriteLine(line);
+            // 遮挡轮询在后台线程写日志，必须串行化，避免 StreamWriter 并发损坏
+            lock (s_logLock)
+            {
+                var line = $"[{DateTime.Now:HH:mm:ss.fff}] {message}";
+                _log.WriteLine(line);
+            }
         }
     }
 }

@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Windows.System;
 using Windows.Storage;
 using Windows.Storage.FileProperties;
 using Windows.UI.Core;
@@ -49,6 +50,8 @@ namespace WinUI2Demo
     {
         private static readonly SemaphoreSlim IconSemaphore = new(8, 8);
         private const int IconSizePx = 32;
+        /// <summary>图标缓存上限：只保留最近使用且靠近视口的图标，超出后淘汰离屏项（回落为类型字形）。</summary>
+        private const int MaxCachedIcons = 160;
 
         public BulkObservableCollection<FileEntry> Items { get; } = new();
 
@@ -77,6 +80,18 @@ namespace WinUI2Demo
         private int _iconRequested;
         private int _iconLoaded;
         private int _iconFailed;
+        private int _iconEvicted;
+        // 图标 LRU：只有已成功加载的项进链表；淘汰时只动离屏项（在屏项移到表尾跳过）。
+        private readonly LinkedList<FileEntry> _iconLru = new();
+        private readonly Dictionary<FileEntry, LinkedListNode<FileEntry>> _iconLruNodes = new();
+        private readonly HashSet<FileEntry> _realizedEntries = new();
+
+        // R8：遮挡降级状态
+        private bool _occluded;
+        private long _occHiddenTicks;
+        private DispatcherTimer? _restoreTimer;
+        private long _restoreStartTicks;
+        private bool _memoryHook;
         private long _hbLastTicks;
         private long _hbMaxGapMs;
         private int _hbSamples;
@@ -104,12 +119,32 @@ namespace WinUI2Demo
 
             PathBox.Text = path;
             Program.Log($"[FV] page start path='{path}'");
+            Program.OcclusionChanged += OnOcclusionFromAnyThread;
+            HookMemoryManager();
             StartLoad(path);
+
+            // 打开页面时宿主可能已经被盖住：事件只在变化时触发，需主动补一次当前状态
+            if (Program.IsHostOccluded)
+                ApplyOcclusion(true, "initial");
         }
 
         protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
             Program.Log($"[FV] navigated from mode={e.NavigationMode}");
+            Program.OcclusionChanged -= OnOcclusionFromAnyThread;
+            if (_memoryHook)
+            {
+                try { MemoryManager.AppMemoryUsageIncreased -= OnAppMemoryUsageIncreased; }
+                catch { /* 降级路径忽略 */ }
+                _memoryHook = false;
+            }
+            _restoreTimer?.Stop();
+            _restoreTimer = null;
+            // 导航离开时页面实例会被释放，但先把引用断掉，避免事件/定时器延长生命周期
+            _iconLru.Clear();
+            _iconLruNodes.Clear();
+            _realizedEntries.Clear();
+            FindFileEnumerator.MaxBatchItems = FindFileEnumerator.NormalBatchItems;
             StopLoad();
             base.OnNavigatedFrom(e);
         }
@@ -166,6 +201,11 @@ namespace WinUI2Demo
             _iconRequested = 0;
             _iconLoaded = 0;
             _iconFailed = 0;
+            _iconEvicted = 0;
+            // 旧条目已从列表移除：LRU/在屏集合必须一起清空，否则旧项会被当作“缓存”持有
+            _iconLru.Clear();
+            _iconLruNodes.Clear();
+            _realizedEntries.Clear();
             _lastViewLogTicks = 0;
             _hbMaxGapMs = 0;
             _hbSamples = 0;
@@ -209,6 +249,8 @@ namespace WinUI2Demo
             _scrollSummaryTimer = null;
             _iconSettleTimer?.Stop();
             _iconSettleTimer = null;
+            _restoreTimer?.Stop();
+            _restoreTimer = null;
         }
 
         private void StartTimers()
@@ -307,8 +349,9 @@ namespace WinUI2Demo
                 $"icons requested={_iconRequested} loaded={Volatile.Read(ref _iconLoaded)} " +
                 $"failed={Volatile.Read(ref _iconFailed)}");
             Program.Log($"[FV] heartbeat feed maxGapMs={_hbMaxGapMs} samples={_hbSamples}");
+            LogModelDetail("feedDone");
             MemProbe.Log("feedDone", Items.Count, EstimateModelBytes(),
-                Volatile.Read(ref _iconLoaded), _maxBatchItems);
+                _iconLru.Count, _maxBatchItems);
 
             _progressTimer?.Stop();
             ResetHeartbeatWindow();
@@ -319,9 +362,10 @@ namespace WinUI2Demo
             {
                 Program.Log($"[FV] icons settle requested={_iconRequested} " +
                     $"loaded={Volatile.Read(ref _iconLoaded)} failed={Volatile.Read(ref _iconFailed)} " +
+                    $"evicted={_iconEvicted} cache={_iconLru.Count} " +
                     $"realized={_realized}");
                 MemProbe.Log("iconsSettle", Items.Count, EstimateModelBytes(),
-                    Volatile.Read(ref _iconLoaded), _maxBatchItems);
+                    _iconLru.Count, _maxBatchItems);
                 _iconSettleTimer?.Stop();
                 _iconSettleTimer = null;
             };
@@ -352,9 +396,9 @@ namespace WinUI2Demo
         }
 
         /// <summary>
-        /// 条目模型内存估算：采样 2000 项取平均后乘总数。
-        /// FileEntry 对象 ≈ 112 字节（对象头 + 9 个字段 + PropertyChanged）；集合数组槽 8 字节；
-        /// 6 个字符串各自 20 字节头（对象头 + 长度/哈希），内容 UTF-16 2 字节/字符。
+        /// 条目模型内存估算（去重感知）：采样 2000 项，按“每项独立字符串 + 去重后共享字符串”两种口径分别折算。
+        /// FileEntry ≈ 104 B、集合槽 8 B；每项独立字符串（Name）20 B 头；去重字段（Size/Date/Type/Glyph）
+        /// 按样本去重数线性外推后只留共享实例；父目录全列表一份。
         /// </summary>
         private long EstimateModelBytes()
         {
@@ -363,17 +407,102 @@ namespace WinUI2Demo
                 return 0;
 
             var sample = Math.Min(2000, count);
-            long chars = 0;
+            long nameChars = 0;
+            var sizeSet = new HashSet<string>(StringComparer.Ordinal);
+            var dateSet = new HashSet<string>(StringComparer.Ordinal);
+            var typeSet = new HashSet<string>(StringComparer.Ordinal);
+            var glyphSet = new HashSet<string>(StringComparer.Ordinal);
+            long sizeDistinctChars = 0, dateDistinctChars = 0, typeDistinctChars = 0, glyphDistinctChars = 0;
+
             for (var i = 0; i < sample; i++)
             {
                 var e = Items[i];
-                chars += e.Name.Length + e.FullPath.Length + e.SizeText.Length +
-                         e.DateText.Length + e.TypeText.Length + e.Glyph.Length;
+                nameChars += e.Name.Length;
+                if (sizeSet.Add(e.SizeText)) sizeDistinctChars += e.SizeText.Length;
+                if (dateSet.Add(e.DateText)) dateDistinctChars += e.DateText.Length;
+                if (typeSet.Add(e.TypeText)) typeDistinctChars += e.TypeText.Length;
+                if (glyphSet.Add(e.Glyph)) glyphDistinctChars += e.Glyph.Length;
             }
 
-            var avgChars = chars / (double)sample;
-            var perItem = avgChars * 2.0 + 112.0 + 8.0 + 6 * 20.0;
-            return (long)(perItem * count);
+            var scale = (double)count / sample;
+            var nameTotalChars = (long)(nameChars * scale);
+
+            // 去重数外推：全同→1，全不同→count；对应字符数按“不同值的平均长度 × 外推个数”折算。
+            long DistinctEst(int distinct, long distinctChars)
+            {
+                if (distinct == 0)
+                    return 0;
+                var n = (long)Math.Min(count, distinct * scale);
+                return n * distinctChars / distinct;
+            }
+
+            var sharedChars = DistinctEst(sizeSet.Count, sizeDistinctChars) +
+                              DistinctEst(dateSet.Count, dateDistinctChars) +
+                              DistinctEst(typeSet.Count, typeDistinctChars) +
+                              DistinctEst(glyphSet.Count, glyphDistinctChars);
+            var sharedCount = Math.Min(count, sizeSet.Count * scale) + Math.Min(count, dateSet.Count * scale) +
+                              Math.Min(count, typeSet.Count * scale) + Math.Min(count, glyphSet.Count * scale);
+            var dirBytes = Items[0].DirPath.Length * 2.0 + 20.0;
+
+            var objBytes = count * 104.0;
+            var headBytes = (count + sharedCount) * 20.0 + 20.0;
+            var contentBytes = (nameTotalChars + sharedChars) * 2.0;
+            return (long)(objBytes + headBytes + contentBytes + dirBytes);
+        }
+
+        /// <summary>
+        /// 条目模型内存分解（台账测量用，只在 --memgc 1 下执行，避免常规运行多付一次全量扫描）：
+        /// 对象+集合槽 = 112 B/项（含共享父目录引用）；每个字符串实例头 20 B；内容 UTF-16 2 B/字符。
+        /// distinct* 给出 SizeText/DateText/TypeText/Glyph 的重复度，dedupTotal 是“这 4 个字段按值共享”
+        /// 之后的模型估算（Name 仍按每项独立，父目录全列表一份）。
+        /// </summary>
+        private void LogModelDetail(string tag)
+        {
+            if (!MemProbe.ForceGc)
+                return;
+
+            var count = Items.Count;
+            if (count == 0)
+                return;
+
+            var dirChars = Items[0].DirPath.Length;
+            long nameChars = 0, sizeChars = 0, dateChars = 0, typeChars = 0, glyphChars = 0;
+            var sizeSet = new HashSet<string>(StringComparer.Ordinal);
+            var dateSet = new HashSet<string>(StringComparer.Ordinal);
+            var typeSet = new HashSet<string>(StringComparer.Ordinal);
+            var glyphSet = new HashSet<string>(StringComparer.Ordinal);
+            long sizeDistinctChars = 0, dateDistinctChars = 0, typeDistinctChars = 0, glyphDistinctChars = 0;
+
+            for (var i = 0; i < count; i++)
+            {
+                var e = Items[i];
+                nameChars += e.Name.Length;
+                sizeChars += e.SizeText.Length;
+                dateChars += e.DateText.Length;
+                typeChars += e.TypeText.Length;
+                glyphChars += e.Glyph.Length;
+
+                if (sizeSet.Add(e.SizeText)) sizeDistinctChars += e.SizeText.Length;
+                if (dateSet.Add(e.DateText)) dateDistinctChars += e.DateText.Length;
+                if (typeSet.Add(e.TypeText)) typeDistinctChars += e.TypeText.Length;
+                if (glyphSet.Add(e.Glyph)) glyphDistinctChars += e.Glyph.Length;
+            }
+
+            var objBytes = count * 104L;
+            var headBytes = count * 5L * 20L + 20L;
+            var contentChars = nameChars + dirChars + sizeChars + dateChars + typeChars + glyphChars;
+            var contentBytes = contentChars * 2L;
+            var dedupHeadBytes = (count + sizeSet.Count + dateSet.Count + typeSet.Count + glyphSet.Count) * 20L + 20L;
+            var dedupContentBytes = (nameChars + dirChars +
+                sizeDistinctChars + dateDistinctChars + typeDistinctChars + glyphDistinctChars) * 2L;
+
+            Program.Log($"[MODEL] tag={tag} items={count} " +
+                $"obj+slot={objBytes / 1048576.0:F2}MB strHead={headBytes / 1048576.0:F2}MB " +
+                $"content={contentBytes / 1048576.0:F2}MB total={(objBytes + headBytes + contentBytes) / 1048576.0:F2}MB " +
+                $"chars name={nameChars} dir={dirChars}(shared) size={sizeChars} date={dateChars} " +
+                $"type={typeChars} glyph={glyphChars} " +
+                $"distinct size={sizeSet.Count} date={dateSet.Count} type={typeSet.Count} glyph={glyphSet.Count} " +
+                $"dedupTotal={(objBytes + dedupHeadBytes + dedupContentBytes) / 1048576.0:F2}MB");
         }
 
         private long PageElapsedMs()
@@ -393,7 +522,11 @@ namespace WinUI2Demo
         private void FileList_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
         {
             if (args.InRecycleQueue)
+            {
+                if (args.Item is FileEntry recycled)
+                    _realizedEntries.Remove(recycled);
                 return;
+            }
 
             if (args.Phase == 0)
             {
@@ -407,7 +540,10 @@ namespace WinUI2Demo
             }
 
             if (args.Item is FileEntry entry)
+            {
+                _realizedEntries.Add(entry);
                 QueueIcon(entry);
+            }
         }
 
         private void QueueIcon(FileEntry entry)
@@ -492,6 +628,8 @@ namespace WinUI2Demo
                 entry.Thumbnail = bmp;
                 entry.ThumbnailState = 2;
                 Interlocked.Increment(ref _iconLoaded);
+                TouchIconCache(entry);
+                TrimIconCache();
             }
             catch
             {
@@ -501,6 +639,208 @@ namespace WinUI2Demo
             finally
             {
                 thumb.Dispose();
+            }
+        }
+
+        /// <summary>把刚加载成功的项放到 LRU 表尾；同一项重复加载时只移动位置。</summary>
+        private void TouchIconCache(FileEntry entry)
+        {
+            var existing = _iconLruNodes.TryGetValue(entry, out var node) ? node : null;
+            if (existing is not null)
+            {
+                _iconLru.Remove(existing);
+                _iconLru.AddLast(existing);
+                return;
+            }
+
+            _iconLruNodes[entry] = _iconLru.AddLast(entry);
+        }
+
+        /// <summary>
+        /// 超过上限后从表头淘汰离屏图标；在屏项移到表尾跳过。
+        /// 淘汰只把 Thumbnail 置空并复位状态，重新滚动回来会再走一次异步补图（代价计入 recovered）。
+        /// </summary>
+        private void TrimIconCache()
+        {
+            if (_iconLru.Count <= MaxCachedIcons)
+                return;
+
+            var node = _iconLru.First;
+            var scanned = 0;
+            var total = _iconLru.Count;
+            while (node is not null && _iconLru.Count > MaxCachedIcons && scanned < total)
+            {
+                var next = node.Next;
+                scanned++;
+                var entry = node.Value;
+                if (_realizedEntries.Contains(entry))
+                {
+                    _iconLru.Remove(node);
+                    _iconLru.AddLast(node);
+                }
+                else
+                {
+                    _iconLru.Remove(node);
+                    _iconLruNodes.Remove(entry);
+                    entry.Thumbnail = null;
+                    entry.ThumbnailState = 0;
+                    _iconEvicted++;
+                }
+
+                node = next;
+            }
+        }
+
+        // ---------------- R8：遮挡/不可见降级与恢复 ----------------
+
+        private void OnOcclusionFromAnyThread(bool occluded, string reason)
+        {
+            var dispatcher = _dispatcher;
+            if (dispatcher is null)
+                return;
+            _ = dispatcher.TryRunAsync(CoreDispatcherPriority.Low, () => ApplyOcclusion(occluded, reason));
+        }
+
+        /// <summary>
+        /// 分级降级（被遮挡时）：①图标位图缓存；②非当前页缓存；③枚举缓冲；④GC + 工作集修剪。
+        /// 每一级单独打点，便于在台账里区分“真省了托管/私有内存”和“只把 WS 挪走”。
+        /// </summary>
+        private void ApplyOcclusion(bool occluded, string reason)
+        {
+            if (!_active)
+            {
+                Program.Log($"[OCC][FV] ignored occluded={occluded} (page inactive)");
+                return;
+            }
+
+            if (occluded == _occluded)
+                return;
+
+            _occluded = occluded;
+
+            if (occluded)
+            {
+                // 恢复计时若还没结束又进入遮挡，直接丢弃，避免出现“恢复很慢”的假结论
+                _restoreTimer?.Stop();
+                _restoreTimer = null;
+
+                _occHiddenTicks = Stopwatch.GetTimestamp();
+                var cacheBefore = _iconLru.Count;
+                Program.Log($"[OCC][FV] enter reason={reason} items={Items.Count} " +
+                    $"cacheBefore={cacheBefore} feedDone={_feedDone}");
+
+                var m0 = GC.GetTotalMemory(true);
+                var released = ClearIconCache("occ");
+                var m1 = GC.GetTotalMemory(true);
+                Program.Log($"[OCC][FV] tier1 icons released={released} cache={cacheBefore}->0 " +
+                    $"managedDeltaKB={(m1 - m0) / 1024} (位图原生/显存部分不计入托管差值)");
+
+                Program.Log("[OCC][FV] tier2 pages: Frame NavigationCacheMode=Disabled，无缓存页可释放 → 0");
+
+                FindFileEnumerator.MaxBatchItems = FindFileEnumerator.OccludedBatchItems;
+                Program.Log($"[OCC][FV] tier3 batchLimit={FindFileEnumerator.MaxBatchItems} " +
+                    $"bufferPeak={_maxBatchItems} (只在枚举尚未完成时生效；已完成则为 0)");
+
+                Program.TrimWorkingSet("occ.t4");
+                return;
+            }
+
+            var hiddenMs = (long)((Stopwatch.GetTimestamp() - _occHiddenTicks) * 1000.0 / Stopwatch.Frequency);
+            FindFileEnumerator.MaxBatchItems = FindFileEnumerator.NormalBatchItems;
+
+            var pending = 0;
+            foreach (var entry in _realizedEntries)
+            {
+                if (entry.ThumbnailState == 0 || entry.ThumbnailState == 1)
+                {
+                    pending++;
+                    QueueIcon(entry);
+                }
+            }
+
+            Program.Log($"[OCC][FV] exit hiddenMs={hiddenMs} reloadQueued={pending} cache={_iconLru.Count}");
+            StartRestoreWatch();
+        }
+
+        private int ClearIconCache(string why)
+        {
+            var released = 0;
+            foreach (var entry in _iconLru)
+            {
+                entry.Thumbnail = null;
+                entry.ThumbnailState = 0;
+                released++;
+            }
+
+            _iconLru.Clear();
+            _iconLruNodes.Clear();
+            Program.Log($"[OCC][FV] iconCache cleared n={released} why={why}");
+            return released;
+        }
+
+        /// <summary>恢复耗时：从重新可见到“在屏项都有图标”的时间；超过 1 s 记为不划算。</summary>
+        private void StartRestoreWatch()
+        {
+            _restoreTimer?.Stop();
+            _restoreStartTicks = Stopwatch.GetTimestamp();
+            _restoreTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+            _restoreTimer.Tick += (_, __) =>
+            {
+                var pending = 0;
+                foreach (var entry in _realizedEntries)
+                {
+                    if (entry.ThumbnailState == 0 || entry.ThumbnailState == 1)
+                        pending++;
+                }
+
+                var elapsed = (long)((Stopwatch.GetTimestamp() - _restoreStartTicks) * 1000.0 / Stopwatch.Frequency);
+                if (pending == 0 || elapsed >= 3000)
+                {
+                    _restoreTimer?.Stop();
+                    _restoreTimer = null;
+                    Program.Log($"[OCC][FV] restore pending={pending} restoreMs={elapsed} " +
+                        $"verdict={(pending == 0 && elapsed <= 1000 ? "OK(<1s)" : "SLOW/INCOMPLETE")}");
+                    LogView("restore");
+                }
+            };
+            _restoreTimer.Start();
+        }
+
+        private void HookMemoryManager()
+        {
+            try
+            {
+                Program.Log($"[MEMPRESSURE] level={MemoryManager.AppMemoryUsageLevel} " +
+                    $"usageMB={MemoryManager.AppMemoryUsage / 1048576.0:F1}");
+                MemoryManager.AppMemoryUsageIncreased += OnAppMemoryUsageIncreased;
+                _memoryHook = true;
+            }
+            catch (Exception ex)
+            {
+                // 无包身份或 API 不可用时如实记录，不做 workaround
+                Program.Log($"[MEMPRESSURE] unavailable {ex.GetType().Name} hr=0x{ex.HResult:X8}");
+            }
+        }
+
+        private void OnAppMemoryUsageIncreased(object? sender, object e)
+        {
+            try
+            {
+                var level = MemoryManager.AppMemoryUsageLevel;
+                Program.Log($"[MEMPRESSURE] increased level={level} " +
+                    $"usageMB={MemoryManager.AppMemoryUsage / 1048576.0:F1}");
+                if (level != Windows.System.AppMemoryUsageLevel.Low)
+                {
+                    _ = _dispatcher?.TryRunAsync(CoreDispatcherPriority.Low, () =>
+                    {
+                        if (_iconLru.Count > 0)
+                            ClearIconCache("pressure");
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Program.Log($"[MEMPRESSURE] handler failed {ex.GetType().Name}");
             }
         }
 
@@ -553,7 +893,7 @@ namespace WinUI2Demo
                     LogView("settle");
                     Program.Log($"[FV] heartbeat scroll maxGapMs={_hbMaxGapMs} samples={_hbSamples}");
                     MemProbe.Log("scrollSettle", Items.Count, EstimateModelBytes(),
-                        Volatile.Read(ref _iconLoaded), _maxBatchItems);
+                        _iconLru.Count, _maxBatchItems);
                     _scrollSummaryTimer?.Stop();
                     _scrollSummaryTimer = null;
                 };
@@ -571,9 +911,17 @@ namespace WinUI2Demo
             var panel = FileList.ItemsPanelRoot as ItemsStackPanel;
             var first = panel?.FirstVisibleIndex ?? -1;
             var last = panel?.LastVisibleIndex ?? -1;
+            var missing = 0;
+            foreach (var e in _realizedEntries)
+            {
+                if (e.ThumbnailState == 0 || e.ThumbnailState == 1)
+                    missing++;
+            }
+
             Program.Log($"[FV] view({reason}) first={first} last={last} realized={_realized} " +
                 $"shown={Items.Count} icons requested={_iconRequested} " +
-                $"loaded={Volatile.Read(ref _iconLoaded)} failed={Volatile.Read(ref _iconFailed)}");
+                $"loaded={Volatile.Read(ref _iconLoaded)} failed={Volatile.Read(ref _iconFailed)} " +
+                $"evicted={_iconEvicted} cache={_iconLru.Count} visibleMissing={missing}");
         }
 
         private static ScrollViewer? FindScrollViewer(DependencyObject root)

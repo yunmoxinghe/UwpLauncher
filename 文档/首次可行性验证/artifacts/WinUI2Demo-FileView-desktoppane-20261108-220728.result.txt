@@ -1,0 +1,27 @@
+﻿mode=desktoppane dir=C:\Users\gold\perf-research\data\f10k expect=10000 log=C:\Users\gold\source\repos\UwpLauncher\文档\首次可行性验证\artifacts\WinUI2Demo-FileView-desktoppane-20261108-220728.log
+pid=16372 aumid=WinUI2Demo_p06pf12qzbwg4!App
+hostHwnd=0x4D0232
+uia scope: name='WinUI2DemoHost' class='WinUI2DemoHost.e600981ebc9247cf8bccaf02763fd604'
+foreground ok=False
+found: fileView=True transparency=True quit=True
+PASS enter: 真实点击进入 FileViewPage
+PASS feed: 枚举/喂入完成
+firstBatch count=30 atMs=153 uiDelayMs=66 applyMs=4 enumMs=70
+firstRealized name=file_000000.dat atMs=224
+enum done count=10000 enumMs=205 error=none
+feed done shown=10000 batches=2 firstPaintMs=153 feedDoneMs=544 uiApplyMaxMs=6 iconsReq=8 iconsLoadedAtDone=0 iconsFailedAtDone=0
+heartbeat feed maxGapMs=375 samples=2
+PASS heartbeat: 喂入期间 UI 最大停顿 375ms
+FAIL transparency: toggled 日志次数不足
+list found: name='文件列表' class='ListView'
+scroll: SetScrollPercent(horizontal=-1, vertical=50) ok
+scroll: settle log received=True
+view settle first=4996 last=5003 realized=87 shown=10000
+PASS scroll: 已滚动到中段（first=4996）
+PASS virtualization: 容器 realized=87（远小于列表项数）
+heartbeat scroll maxGapMs=421 samples=13
+FAIL back: 未返回 PageA
+FAIL reenter: PageA 的
+FAIL quit: 未收到 close requested
+cleanup: killed leftover pid=16372
+RESULT mode=desktoppane failures=4

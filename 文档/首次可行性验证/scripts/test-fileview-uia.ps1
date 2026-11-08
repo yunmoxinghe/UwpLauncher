@@ -42,6 +42,15 @@ param(
 
     [int]$ScrollPercent = 50,
 
+    # 可选：滚动扫描序列（百分比），用于验证图标缓存 LRU 淘汰/回填
+    [int[]]$Sweep = @(),
+
+    # 可选：遮挡降级实测（自建无边框覆盖窗：全屏=全遮挡，700x500=部分遮挡边界）
+    [switch]$OccludeTest,
+
+    # 可选：关闭遮挡降级（--occ 0），用于性能/内存口径与之前轮次对比
+    [switch]$NoOcc,
+
     [switch]$MemGc,
 
     [string]$LogPath = ""
@@ -212,6 +221,29 @@ if (-not ([System.Management.Automation.PSTypeName]"WinCleanup").Type) {
     Add-Type -TypeDefinition $cleanupSource -Language CSharp
 }
 
+$coverSource = @"
+using System;
+using System.Runtime.InteropServices;
+public static class CoverWin {
+    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
+    [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
+    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "FindWindowW")] static extern IntPtr FindWindow(string cls, string title);
+    public static IntPtr ByTitle(string title) { return FindWindow(null, title); }
+    public static bool Maximize(IntPtr h) { ShowWindow(h, 3); SetForegroundWindow(h); return true; }
+    public static bool Normal(IntPtr h) { ShowWindow(h, 9); SetForegroundWindow(h); return true; }
+    // 部分遮挡边界：缩到 700x500 并移到左上，不再覆盖宿主 95% 面积
+    public static bool Partial(IntPtr h) {
+        ShowWindow(h, 9);
+        SetWindowPos(h, IntPtr.Zero, 120, 120, 700, 500, 0x0004 | 0x0010);
+        return true;
+    }
+}
+"@
+if (-not ([System.Management.Automation.PSTypeName]"CoverWin").Type) {
+    Add-Type -TypeDefinition $coverSource -Language CSharp
+}
+
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 
@@ -331,6 +363,7 @@ Set-Content -Path $resultFile -Value "mode=$Mode dir=$Dir expect=$Expect log=$Lo
 
 $argString = "--mode $Mode --transparent 1 --fill work --dir `"$Dir`" --log `"$LogPath`""
 if ($MemGc) { $argString += " --memgc 1" }
+if ($NoOcc) { $argString += " --occ 0" }
 $aumid = "$($pkg.PackageFamilyName)!App"
 $processId = [DemoLauncher]::Activate($aumid, $argString)
 $proc = Get-Process -Id ([int]$processId)
@@ -472,6 +505,78 @@ if ($trans) {
 }
 else { Add-Result "FAIL transparency: UIA 未找到“透明”"; $fail++ }
 
+# 3b) 遮挡检测与分级降级（R8）：自建无边框窗口做可控全遮挡 / 部分遮挡边界
+if ($OccludeTest) {
+    $coverScript = @'
+Add-Type -AssemblyName System.Windows.Forms
+$f = New-Object System.Windows.Forms.Form
+$f.Text = "WinUI2DemoCover"
+$f.FormBorderStyle = "None"
+$f.StartPosition = "Manual"
+$f.Bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+$f.TopMost = $false
+[System.Windows.Forms.Application]::Run($f)
+'@
+    $coverFile = Join-Path $env:TEMP "winui2demo-coverwin.ps1"
+    Set-Content -Path $coverFile -Value $coverScript -Encoding UTF8
+    $note = Start-Process powershell -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", $coverFile) -PassThru
+    $hw = [IntPtr]::Zero
+    for ($i = 0; $i -lt 150; $i++) {
+        Start-Sleep -Milliseconds 100
+        $p = Get-Process -Id $note.Id -ErrorAction SilentlyContinue
+        if ($p -and $p.MainWindowHandle -ne 0) { $hw = [IntPtr]$p.MainWindowHandle; break }
+        $byTitle = [CoverWin]::ByTitle("WinUI2DemoCover")
+        if ($byTitle -ne [IntPtr]::Zero) { $hw = $byTitle; break }
+    }
+
+    if ($hw -eq [IntPtr]::Zero) {
+        Add-Result "FAIL occlude: 覆盖窗口未出现"; $fail++
+        Stop-Process -Id $note.Id -Force -ErrorAction SilentlyContinue
+    }
+    else {
+        $okOcc = (Wait-LogCount "\[OCC\] occluded=1" 1 12000)
+        if ($okOcc) { Add-Result "PASS occlude: 全屏覆盖窗口 → [OCC] occluded=1" }
+        else { Add-Result "FAIL occlude: 全屏覆盖未触发遮挡判定"; $fail++ }
+
+        Start-Sleep -Milliseconds 1200
+        $tOcc = Read-Log
+        $mOcc = [regex]::Matches($tOcc, "\[OCC\] occluded=1 reason=([^\s]+)") | Select-Object -Last 1
+        $mT1 = [regex]::Matches($tOcc, "\[OCC\]\[FV\] tier1 icons released=(\d+) cache=\d+->0 managedDeltaKB=(-?\d+)") | Select-Object -Last 1
+        $mT3 = [regex]::Matches($tOcc, "\[OCC\]\[FV\] tier3 batchLimit=(\d+) bufferPeak=(\d+)") | Select-Object -Last 1
+        $mT4 = [regex]::Matches($tOcc, "\[MEM\] tag=occ\.t4 wsBefore=([\d.]+)MB wsAfterGc=([\d.]+)MB wsAfterTrim=([\d.]+)MB private=([\d.]+)MB") | Select-Object -Last 1
+        if ($mOcc) { Add-Result "occlude reason=$($mOcc.Groups[1].Value)" }
+        if ($mT1) { Add-Result ("tier1 icons released={0} managedDeltaKB={1}" -f $mT1.Groups[1].Value, $mT1.Groups[2].Value) }
+        else { Add-Result "FAIL occlude: 缺 tier1 日志"; $fail++ }
+        if ($mT3) { Add-Result ("tier3 batchLimit={0} bufferPeak={1}" -f $mT3.Groups[1].Value, $mT3.Groups[2].Value) }
+        else { Add-Result "FAIL occlude: 缺 tier3 日志"; $fail++ }
+        if ($mT4) { Add-Result ("tier4 ws {0}->{1}->{2}MB private={3}MB" -f $mT4.Groups[1].Value, $mT4.Groups[2].Value, $mT4.Groups[3].Value, $mT4.Groups[4].Value) }
+        else { Add-Result "FAIL occlude: 缺 tier4 日志"; $fail++ }
+
+        $clearBefore = ([regex]::Matches((Read-Log), "\[OCC\] occluded=0")).Count
+        [CoverWin]::Partial($hw) | Out-Null
+        $okClear = Wait-LogCount "\[OCC\] occluded=0" ($clearBefore + 1) 10000
+        if ($okClear) { Add-Result "PASS occlude-boundary: 700x500 部分遮挡 → occluded=0" }
+        else { Add-Result "FAIL occlude-boundary: 部分遮挡被误判为全遮挡"; $fail++ }
+
+        $occ2Before = ([regex]::Matches((Read-Log), "\[OCC\] occluded=1")).Count
+        [CoverWin]::Maximize($hw) | Out-Null
+        $okOcc2 = Wait-LogCount "\[OCC\] occluded=1" ($occ2Before + 1) 10000
+        if ($okOcc2) { Add-Result "PASS occlude-again: 二次全屏再次触发" }
+        else { Add-Result "FAIL occlude-again: 二次全屏未触发"; $fail++ }
+
+        Stop-Process -Id $note.Id -Force -ErrorAction SilentlyContinue
+        $okRestore = Wait-LogCount "\[OCC\]\[FV\] restore" 1 8000
+        Start-Sleep -Milliseconds 500
+        $mR = [regex]::Matches((Read-Log), "\[OCC\]\[FV\] restore pending=(\d+) restoreMs=(\d+) verdict=([^\s]+)") | Select-Object -Last 1
+        if ($okRestore -and $mR) {
+            Add-Result ("restore pending={0} restoreMs={1} verdict={2}" -f $mR.Groups[1].Value, $mR.Groups[2].Value, $mR.Groups[3].Value)
+            if ([int]$mR.Groups[2].Value -le 1000) { Add-Result "PASS restore: 恢复到可用 ≤1s" }
+            else { Add-Result "FAIL restore: >1s（按‘不划算’记录）"; $fail++ }
+        }
+        else { Add-Result "FAIL restore: 未收到恢复计时"; $fail++ }
+    }
+}
+
 # 4) 滚动到中段：UIA ScrollPattern 50%，看 firstVisible 与 realized 容器数
 $list = Find-ByAutomationId $scope "FileList"
 if ($list) {
@@ -507,6 +612,24 @@ if ($list) {
     }
 }
 else { Add-Result "FAIL scroll: UIA 未找到 FileList"; $fail++ }
+
+# 4b) 可选：滚动扫描，观察图标缓存上限/淘汰/回填（每次停 1.5 秒等 settle 汇总）
+if ($Sweep.Count -gt 0 -and $list) {
+    $sp2 = $list.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern)
+    foreach ($pct in $Sweep) {
+        $before = ([regex]::Matches((Read-Log), "\[FV\] view\(settle\)")).Count
+        $sp2.SetScrollPercent(-1, $pct)
+        $ok = Wait-LogCount "\[FV\] view\(settle\)" ($before + 1) 8000
+        Start-Sleep -Milliseconds 300
+        $tS = Read-Log
+        $mV = [regex]::Matches($tS, "\[FV\] view\(settle\) first=(-?\d+) last=(-?\d+) realized=(\d+) shown=(\d+) icons requested=(\d+) loaded=(\d+) failed=(\d+) evicted=(\d+) cache=(\d+) visibleMissing=(\d+)") | Select-Object -Last 1
+        if ($mV) {
+            Add-Result ("sweep pct={0} settle={1} first={2} cache={3} evicted={4} visibleMissing={5} loaded={6}" -f
+                $pct, $ok, $mV.Groups[1].Value, $mV.Groups[9].Value, $mV.Groups[8].Value, $mV.Groups[10].Value, $mV.Groups[6].Value)
+        }
+        else { Add-Result "FAIL sweep: pct=$pct 未找到带缓存字段的 view(settle)"; $fail++ }
+    }
+}
 
 # 5) 返回 PageA，再进入一次文件页（导航进/出后能力仍正常）
 # PageA 上也有一个禁用的“← 返回”，进入文件页后必须重新查找当前页的返回按钮

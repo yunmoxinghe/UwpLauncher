@@ -67,6 +67,13 @@
 | 轮次 | 变量 | 改法 | before → after | 判定 |
 | --- | --- | --- | --- | --- |
 | R1 | 批大小 | `MaxBatchItems` 20 000 → 5 000（同会话连跑 3 次） | feedDone 489–1360 → 818/564/826 ms；hbGap 169–596 → 529/251/138 ms；batches 6 → 21 | 未降低最大停顿（hbGap 仍 138–529），反而批次数变多；不能单独达标。改回 20 000 后进入 AOT 对比 |
+| R2 | 测量口径（不改行为） | 新增 `[MODEL]` 分解；`estModel` 改为与之一致（每项 5 个字符串头 + 逐项字符内容） | managed 42.80 不变；`[MODEL]` obj+slot 11.44 / strHead 11.44 / content 18.69 / total 41.58、去重感知 28.42 MB；firstPaint 109、feedDone 591、enum 537、hbGap 421 | 只量化。确认 `FullPath` 单独 5.4M 字符 ≈10.3 MB，是最大单项 |
+| R3 | 路径驻留 | 去掉每项 `FullPath`，改存共享父目录 `_dir`（一份）+ `FullPath` 懒拼 | managed 42.80 → 29.83；private 91.1 → 83.5；[MODEL] content 18.69 → 8.39、total 41.58 → 28.61、去重 28.42 → 15.45；enum 537 → 409、feedDone 591 → 542、hbGap 421 → 400、firstPaint 109 | 达成主要降幅（−12.97 MB），无耗时退化；排序/点击/滚动回归正常 |
+| R4 | 显示字符串 | `DisplayTextPool`：单次枚举内去重 SizeText/DateText/TypeText（各上限 8192） | managed 29.83 → 16.87；private 83.5 → 65.9；enum 409 → 356、feedDone 542 → 418、hbGap 400 → 307、firstPaint 87 | 达成（−12.96 MB）。代价是枚举线程多 3 个字典（<0.2 MB 峰值），耗时反而更低 |
+| R5 | 未消费字段 | 删除 `FileEntry.Size`/`Modified`（模板只用 SizeText/DateText/TypeText） | managed 16.87 → 15.34；private 65.9 → 67.8（池噪声）；obj+slot 10.68 → 9.92；enum 356 → 328、feedDone 418 → 409、hbGap 363、firstPaint 66 | 小幅达成（−1.53 MB）。private 略升属进程池波动，不作为回归 |
+| R6 | 图标缓存 | 上限 160 + LRU，只淘汰离屏项；滚动时回填可见项 | cache 封顶 160；6 个停靠点累计 loaded 236 / evicted 76，各点 `visibleMissing=0`；`estIcons` 上限 0.62 MB | 达成：稳态常驻不再随滚动增长。重解码代价见 4.5，与基线同量级 |
+| R7 | 枚举缓冲 | 评估后不改代码：现有实现是“单批 List + 时间片发批”，批次 List 用完即弃，无整表快照 | bufferPeak 20000（= 单批上限，仅是引用数组 ≈160 KB 瞬时）、10k 时 9970（一次发完） | 无收益：条目对象本来就直接进集合，不做复制；池化最多省 ~0.16 MB 瞬时并引入跨线程归还竞态 → 不做（如实记为“未实施”） |
+| R8 | 遮挡降级 | 见第 5 节 | 见 5.2/5.3 | 部分达成：WS 可降到 1–7 MB，private 基本不动（只省下 tier1 的托管部分） |
 
 （后续每轮在此追加一行；保留每轮可回退的最小 diff，行为（排序/路径/点击/透明/嵌入）每次回归。）
 
@@ -129,4 +136,158 @@
 - 但它**不是内存目标的解**：整进程省 ~35–44 MB WS / 7–14 MB Private，自持模型仍是 42.4 MB。
 - 按既定路线，一级未失败，**不启动二级 C++/WinRT 宿主**。
 - 推荐：交付继续用 CoreCLR 构建（打包链路简单、行为已验收）；把下一轮优化放在条目模型（路径/时间/类型字符串驻留与共享、路径前缀去重、图标缓存上限），AOT 只在需要压低常驻/启动时再启用。
+
+## 4. 条目模型瘦身（R2–R7，2026-11-08 晚）
+
+口径同第 0 节：100k = `C:\Users\gold\perf-research\data\f100k`，`--memgc 1`，desktoppane，强制 GC 后存活。
+
+### 4.1 R2：先量清楚再动手
+
+新增 `[MODEL]` 分解（`--memgc` 时全量扫描集合一次），把模型拆成四块：
+
+| 组成 | 基线（FullPath 驻留） | 说明 |
+| --- | --- | --- |
+| obj+slot | 11.44 MB | `FileEntry` 对象 + `ObservableCollection` 槽，按 104 B/项 计 |
+| strHead | 11.44 MB | 每个字符串引用 20 B 头 ×5（Name/SizeText/DateText/TypeText/Glyph）+ FullPath |
+| content | 18.69 MB | 9.8M 字符 ×2 B；其中 **FullPath 5.4M 字符 ≈10.3 MB**（58% 的内容） |
+| total / 去重感知 | 41.58 / 28.42 MB | 去重感知版假设 SizeText(1 种)/DateText(4 种)/TypeText(1 种) 共享 |
+
+- 结论：路径是最大单项；显示文本原始 2.8M 字符但只有 6 个不同值（`distinct size=1 date=4 type=1 glyph=1`），共享空间约 5.5 MB；Name 1.5M 字符（100k 个不同文件名）不可去重，是硬底。
+- 本项不改行为，只是把后续每轮的收益可归因。
+
+### 4.2 R3：父目录前缀共享
+
+- 改法：`FileEntry` 只存共享的 `_dir`（同一次枚举内一份），`FullPath` 改为 `Path.Combine(_dir, Name)` 懒拼；枚举侧把 `dir` 传进去一次。
+- 结果：managed 42.80 → 29.83 MB（−12.97），private 91.1 → 83.5，`[MODEL]` content 18.69 → 8.39、去重感知 28.42 → 15.45；enum 537 → 409、feedDone 591 → 542、hbGap 421 → 400、firstPaint 109。无耗时退化。
+- 判定：这一轮拿走了一半以上，且没有用速度换内存。
+
+### 4.3 R4：显示字符串去重池
+
+- 改法：`DisplayTextPool` 在单次枚举内共享 SizeText/DateText/TypeText（三类各 8192 上限的字典，超出后不再共享、只影响内存不影响正确性）。
+- 结果：managed 29.83 → 16.87（−12.96），private 83.5 → 65.9；enum 409 → 356、feedDone 542 → 418、hbGap 400 → 307、firstPaint 87。
+- 判定：达成。100k 实测 distinct 只有 1/4/1，全部命中；字典本身峰值 <0.2 MB。
+
+### 4.4 R5：删掉未消费字段
+
+- 改法：删除 `FileEntry.Size`/`Modified`（模板与排序只用 `SizeText`/`DateText`/`TypeText`）。
+- 结果：managed 16.87 → 15.34（−1.53），obj+slot 10.68 → 9.92；enum 356 → 328、feedDone 418 → 409、hbGap 363、firstPaint 66。
+- 判定：小幅达成。private 65.9 → 67.8 的 +1.9 MB 是进程池/保留段波动，不是回归。
+
+### 4.5 R6：图标缓存上限 + LRU
+
+- 改法：`MaxCachedIcons=160`，`LinkedList` + `Dictionary` 做 LRU；只淘汰离屏项（`_realizedEntries` 在屏项移到表尾跳过）；容器回收（`InRecycleQueue`）时从“在屏集合”移除，重新可见时 `QueueIcon` 回填。
+- 实测（一次滚动扫描 50→25→50→75→100→0%）：
+
+| 停靠点 | loaded 累计 | evicted 累计 | cache | visibleMissing |
+| --- | --- | --- | --- | --- |
+| 50% | 79 | 0 | 79 | 0 |
+| 25% | 119 | 0 | 119 | 0 |
+| 50% | 119 | 0 | 119 | 0 |
+| 75% | 159 | 0 | 159 | 0 |
+| 100% | 198 | 38 | 160 | 0 |
+| 0% | 236 | 76 | 160 | 0 |
+
+- 重解码代价：每停靠到一个新位置要补 ~40 个图标，`view(moving)` → `view(settle)` 约 1.4–2.1 s（含 Shell 缩略图往返）；与无 LRU 基线（79/79 也约 1.5 s）同量级，没有明显退化。
+- 常驻上限：160 × 32×32×4 = 0.62 MB 位图（`estIcons` 0.62 MB 封顶，托管侧只有引用）；滚动到底不再无限增长。
+- 判定：达成。代价是来回滚动会重复解码，但只对可见区域，且 `visibleMissing` 每次都能在观察窗内回填到 0。
+
+### 4.6 R7：枚举缓冲评估（未实施）
+
+- 现状：`FindFileEnumerator` 边扫边发，每批一个 `new List<FileEntry>`，`FileBatch.Items` 直接交给 UI 线程把引用搬进集合后用弃；**不存在整表快照，也没有复制条目**。
+- `bufferPeak=20000` 只是“单批上限”，折算瞬时内存 ≈160 KB（20000 × 8 B 引用）；10k 目录 `bufferPeak=9970`（一次发完）。
+- 评估结论：复用缓冲最多省这 ~0.16 MB，且要跨线程归还（UI 线程消费完才能还）会引入竞态；R1 已证明把批次从 20k 降到 5k 只会让批次数变多、不降最大停顿。**判定不划算，本轮不做**（如实记录为“未实施”，不报收益）。
+
+### 4.7 终态数字与结构性下限
+
+100k 终态（log 220623，`--occ 0` 隔离遮挡干扰）：
+
+| 场景 | WS / Private | managed | estModel | bufferPeak |
+| --- | --- | --- | --- | --- |
+| 空载 idle | 94.0 / 24.1 MB | 0.44 MB | 0 | 0 |
+| feedDone | 159.5 / 64.4 | 15.35 | 14.69 | 20000 |
+| iconsSettle | 175.4 / 79.5 | 15.54 | 14.69 | 20000 |
+| scrollSettle | 172.8 / 76.7 | 15.56 | 14.69 | 20000 |
+| 同进程二次 feedDone | 174.0 / 78.7 | 15.50 | 14.69 | 20000 |
+
+基线与终态对照：
+
+| 指标（100k feedDone） | 基线 | 终态 | 变化 |
+| --- | --- | --- | --- |
+| managed | 42.80 MB | 15.35 MB | **−27.45** |
+| 自持（managed − idle） | 42.36 MB | 14.91 MB | **−27.45** |
+| Private | 89.5 MB | 64.4 MB | −25.1 |
+| WS | 184.7 MB | 159.5 MB | −25.2 |
+| `[MODEL]` | total 41.58 / 去重 28.42 | total 27.85 / 去重 14.69 | −13.73 / −13.73 |
+| 枚举 enumMs | 320–660 | 328–499（热）/ 924–1361（冷） | 未退化 |
+| 喂入 feedDone | 489–1360 | 800 / 760 | 落在基线区间 |
+| firstPaint | 88–139 | 66–209 | 未退化 |
+| hbGap | 169–596 | 548 / 460 | **未达标（预算 50）**；属既有短板，本轮未恶化 |
+
+10k 终态（log 220833）：idle 95.2 / 25.2 / managed 0.44；feedDone WS 127.0 / Private 41.5 / managed 2.03 / `[MODEL]` total 2.78、去重 1.47；firstPaint 125、feedDone 160、enum 86、hbGap 113、realized 79。基线对照：Private 49.7 → 41.5，managed 4.78 → 2.03。
+
+**结构性下限（重要）**
+
+- 终态 `[MODEL]`：obj+slot **9.92 MB**（100k × 104 B，`FileEntry` 对象 + 集合槽，跟架构绑定）、strHead 9.54、content 8.39。
+- 其中不可再压的部分：对象+槽 9.92 MB + Name 字符串（头 1.9 + 内容 3.0）≈ **14.9 MB**，与实测自持 14.91 MB 吻合。
+- 结论：**在“每项一个 class + INotifyPropertyChanged + ObservableCollection<FileEntry>”这个架构下，10 万项自持最低就是 ~14.9 MB，10 MB 目标不可达**。这不是没试够，是对象头/引用/集合槽的固定成本。
+- 若一定要继续往 10 MB 以下走，只有两条结构性改法（本轮不做，需要产品决策）：
+  1) SizeText/DateText/TypeText/Glyph 改存池索引（int）而不是字符串引用：可省约 6 MB（→ ~9 MB 自持），代价是模板绑定要改成“索引→字符串”的间接访问；
+  2) 换虚拟 item source（按页/按窗口物化 + 淘汰）或值类型条目数组：可到 ~6–7 MB，代价是排序/筛选/滚动条总数语义都要重写。
+
+## 5. 遮挡 / 不可见时降级（R8，独立单变量）
+
+前提：只丢缓存与数据，**保留 XAML 绘制系统**（不销毁 `DesktopWindowXamlSource`、不卸载页面）。
+
+### 5.1 遮挡判定（写清依据）
+
+600 ms 一次 `System.Threading.Timer` 轮询，状态变化才打日志并触发事件；判定顺序：
+
+1. 宿主根窗口（`GetAncestor(host, GA_ROOT)`）不可见 → `host-hidden`；最小化（`IsIconic`）→ `host-minimized`。
+2. **前景窗口**：`GetForegroundWindow()` 的矩形与宿主矩形求交，覆盖 ≥95% 宿主面积 → 遮挡。排除 shell 桌面类（`Progman`/`WorkerW`/`Shell_TrayWnd`/`Shell_SecondaryTrayWnd`）。
+3. **Z 序**：从宿主按 `GetWindow(root, GW_HWNDPREV)` 逐层向上走（最多 64 层），每个可见非 shell 窗口的矩形与宿主求交，覆盖 ≥95% → 遮挡。
+4. 为什么前景要单独判：TopMost 窗口与普通窗口处在不同 Z 序带，`GW_HWNDPREV` 只会在同一带内游走，TopMost 覆盖窗必须直接从前景句柄看（这一条是实测踩坑后补的）。
+
+显示器 `rcMonitor` 的用法：desktoppane 模式下宿主铺满工作区，最大化/全屏窗口的 `GetWindowRect` 就等于 `rcWork`/`rcMonitor` 区域，因此“盖住所在显示器”退化成“矩形覆盖宿主 ≥95%”，无需再单独取 `MONITORINFO.rcMonitor`。不做逐像素、不做 DWM cloaked（虚拟桌面）、不做多窗拼合覆盖。
+
+实测边界（`scripts/test-fileview-uia.ps1 -OccludeTest`，自建无边框窗体）：
+
+| 场景 | 结果 | 日志证据 |
+| --- | --- | --- |
+| 无覆盖（桌面/终端在后面） | 不触发 | `occluded=0 reason=clear` |
+| 100% 全屏覆盖（Bounds=PrimaryScreen） | 触发 | `occluded=1 reason=foreground-covers[WindowsForms10...] cover=100%` |
+| 700×500 @ (120,120) 部分遮挡 | 不触发 | `PASS occlude-boundary` |
+| 二次全屏 | 再次触发 | `occluded=1 ...` |
+| 关闭覆盖窗 | 恢复 | `exit hiddenMs=602`、`restoreMs=770 verdict=OK(<1s)` |
+
+- 排查记录：最初误判 `Progman` 为 100% 覆盖（shell 桌面窗口在 Z 序里在宿主之上），导致枚举期 `MaxBatchItems` 被降到 1500（batches 6 → 68、feedDone 1465 ms）；排除 shell 桌面类后恢复 batches=6、feedDone 1009 ms。
+
+### 5.2 分级降级（各自省了多少）
+
+| 级别 | 动作 | 实测收益 | 备注 |
+| --- | --- | --- | --- |
+| tier1 | 清图标位图缓存（LRU 全清，`Thumbnail=null`、`ThumbnailState=0`） | 释放 39 个图标，managed −13 KB（第二次 −76 KB） | 位图在原生/显存，不计入托管差值；托管只省引用 |
+| tier2 | 非当前 Page 内容不缓存（`Frame.NavigationCacheMode=Disabled`） | **0**（本 demo 只有 PageA/FileViewPage 两页且未设缓存，无可释放页） | 记为“未产生收益” |
+| tier3 | 枚举缓冲收紧（`MaxBatchItems` 20000 → 1500） | **本次 0**：遮挡发生时枚举已完成，`bufferPeak` 仍 20000 | 只在“枚举尚未完成”时有意义 |
+| tier4 | 强制 GC + `EmptyWorkingSet` | WS 165.1 → 165.1 → **1.3 MB**；private 69.4 不动 | 仅降 WS，**private 基本不变，不等于省内存** |
+
+- 恢复路径：重新可见时把 `MaxBatchItems` 复原为 20000，对在屏且图标缺失的项重新 `QueueIcon`，100 ms 轮询等回填完成。
+- 实测恢复耗时：`restoreMs=380 verdict=OK(<1s)`（另一次 `770 ms`）；两次都 ≤1 s，**判定划算**。恢复期间 `view(restore)` 的 `visibleMissing=0`。
+- 计时修正：再次进入遮挡时必须停掉恢复计时，否则会得到假的 `restoreMs=1378 SLOW`（已修）。
+
+### 5.3 内存压力自适应（MemoryManager）
+
+- 接入 `Windows.System.MemoryManager.AppMemoryUsageLevel` + `AppMemoryUsageIncreased`（打包上下文有效）。
+- 行为：级别为非 `Low` 时清图标缓存（保守做法，宁可多丢）。
+- 观测事实（如实记录）：启动后 `[MEMPRESSURE] level=OverLimit usageMB=47.1`，喂入期 `level=OverLimit usageMB=94.5`。即本机在大目录喂入时系统上报一直是 `OverLimit`，按“非 Low 就清”会导致频繁丢缓存——这不是理想语义，属于当前 API 在本场景下的实际表现，本轮不加更细的阈值。
+
+### 5.4 指标口径（必须说清）
+
+- `EmptyWorkingSet`/工作集修剪**只降 working set**：`WS 165.1 → 1.3 MB` 而 `private 69.4 MB` 完全不变。这不算“省了内存”，只是把页面挤出物理内存，后续访问会再缺页拉回。
+- tier1 的托管收益是 KB 量级；真正的图标位图在原生/显存，任务管理器口径看不到托管差值。
+- 因此 R8 的判定是：**WS 显著可降、private 基本不降、恢复 ≤1 s**；对“整进程 private 跟着降”的目标**没有贡献**。
+
+### 5.5 开关与回归
+
+- `--occ 0` 关闭遮挡检测（避免 IDE/终端盖住桌面时把枚举批次降到 1500 干扰性能口径）；内存/耗时对比全部用 `--occ 0` 重跑。
+- 功能回归（`-OccludeTest` 完整脚本）：进入/返回、透明开关、100k 枚举、滚动到 50%（realized 95）、宏键退出全部 PASS，`RESULT failures=0`。
 

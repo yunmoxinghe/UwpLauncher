@@ -794,3 +794,30 @@ msbuild ...\WinUI2Demo.csproj /restore /t:Publish /p:Platform=x64 /p:Configurati
 - 一级路线**未失败**（能跑 + 功能等价），按既定路线**不启动二级 C++/WinRT 宿主**。
 - 但 AOT 只降低运行时开销，不能解决 100k 的自持内存；且打包需手工补 XBF、滚动观测 hook 在 AOT 下失效。
 - **推荐**：交付继续用 CoreCLR；下一轮把优化放在条目模型瘦身（字符串驻留/前缀去重、图标缓存上限、枚举缓冲复用）。
+
+## 14. 条目模型瘦身与遮挡降级（R2–R8，2026-11-08 晚）
+
+逐轮数字与判定见 [OPTIMIZATION.md](OPTIMIZATION.md) 第 4、5 节；本节只记录行为变化与可复测入口。
+
+### 14.1 行为变化
+
+- **路径**：`FileEntry` 不再驻留 `FullPath`，只存共享父目录；`FullPath` 在需要时 `Path.Combine` 懒拼（点击/打开仍拿得到完整路径）。
+- **显示文本**：SizeText/DateText/TypeText 在同一次枚举内共享同一实例（`DisplayTextPool`，每类 8192 上限）；`Size`/`Modified` 原始值字段已删除（模板与排序只用文本）。
+- **图标缓存**：上限 160 + LRU，只淘汰离屏项；重新滚动到已淘汰区域会重新解码，`visibleMissing` 在观察窗内可回填到 0。
+- **遮挡降级**：宿主被全屏/最大化窗口覆盖或隐藏时，按 tier1→tier4 丢图标缓存、收紧枚举批次、GC + `EmptyWorkingSet`；重新可见时懒加载回来。判定依据、边界与分级收益见 OPTIMIZATION.md 5.1–5.5。
+- **新增开关 `--occ 0`**：关闭遮挡检测。仅在测性能/内存口径时使用（否则 IDE/终端盖住桌面会把枚举批次降到 1500，干扰 `feedDone`）；默认开启。
+- **新日志**：`[MODEL]`（仅 `--memgc 1`，模型分解）、`[OCC]`/`[OCC][FV]`（遮挡状态与分级动作）、`[MEMPRESSURE]`（`MemoryManager` 级别）、`[FV] view(settle)` 追加 `evicted/cache/visibleMissing`。
+
+### 14.2 实测结果（100k，`--memgc 1`，`--occ 0`）
+
+| 指标 | 基线 | R2–R5 终态 |
+| --- | --- | --- |
+| managed | 42.80 MB | **15.35 MB** |
+| 自持（managed − 空载） | 42.36 MB | **14.91 MB** |
+| Private / WS | 89.5 / 184.7 MB | 64.4 / 159.5 MB |
+| `[MODEL]` total / 去重 | 41.58 / 28.42 MB | 27.85 / 14.69 MB |
+| enumMs / feedDone / firstPaint | 320–660 / 489–1360 / 88–139 | 328–499 / 800 / 209 |
+
+- 结构性结论：**当前架构（每项一个 class + INPC + ObservableCollection）下 100k 自持下限 ≈14.9 MB，10 MB 不可达**；继续下降需要改池索引或虚拟 item source，见 OPTIMIZATION.md 4.7。
+- 遮挡降级：全屏覆盖触发、700×500 部分遮挡不触发、二次触发、恢复 `restoreMs=380/770 ms`（≤1 s 判定划算）；tier4 `WS 165.1 → 1.3 MB` 而 `private 69.4 MB` 不变 —— **只降 WS，不算省内存**。
+- 回归：`scripts/test-fileview-uia.ps1 -OccludeTest`（100k）`failures=0`，进入/返回/透明/滚动/退出全 PASS；`-Sweep 25,50,75,100,0` 用于图标 LRU（cache 封顶 160、累计 evicted 76、各点 `visibleMissing=0`）。

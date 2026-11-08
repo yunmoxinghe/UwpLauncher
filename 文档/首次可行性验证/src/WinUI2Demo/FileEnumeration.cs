@@ -11,33 +11,63 @@ using Windows.UI.Xaml.Media;
 namespace WinUI2Demo
 {
     /// <summary>
+    /// 单次枚举内的显示字符串去重池：同值只保留一个实例（SizeText/DateText/TypeText）。
+    /// 每类最多记录 8192 个不同值，达到上限后只查不增——这样在全不同的真实目录里，
+    /// 额外开销也封顶在几十万个引用以内，不会把内存换成“字典更大”。
+    /// </summary>
+    internal sealed class DisplayTextPool
+    {
+        private const int MaxDistinct = 8192;
+        private readonly Dictionary<string, string> _size = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> _date = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> _type = new(StringComparer.Ordinal);
+
+        internal string Size(string value) => Share(_size, value);
+        internal string Date(string value) => Share(_date, value);
+        internal string Type(string value) => Share(_type, value);
+
+        private static string Share(Dictionary<string, string> map, string value)
+        {
+            if (map.TryGetValue(value, out var existing))
+                return existing;
+            if (map.Count < MaxDistinct)
+                map[value] = value;
+            return value;
+        }
+    }
+
+    /// <summary>
     /// 列表项：所有显示用字符串在后台枚举线程里预格式化，UI 只读（避免绑定 getter 现算字符串）。
     /// Thumbnail 在 UI 线程由两段式图标管线补齐，失败则保留类型字形。
     /// </summary>
     public sealed class FileEntry : INotifyPropertyChanged
     {
         private ImageSource? _thumbnail;
+        // 父目录在整批条目间共享同一个字符串实例（避免 10 万份全路径重复驻留）；
+        // FullPath 只在补图标时按需拼一次，不进常驻模型。
+        private readonly string _dir;
 
-        internal FileEntry(string name, string fullPath, bool isDirectory, ulong size, DateTime modified)
+        internal FileEntry(string dir, string name, bool isDirectory, ulong size, DateTime modified,
+            DisplayTextPool? textPool)
         {
+            _dir = dir;
             Name = name;
-            FullPath = fullPath;
             IsDirectory = isDirectory;
-            Size = size;
-            Modified = modified;
-            SizeText = isDirectory ? "" : FormatSize(size);
-            DateText = modified == default ? "" : modified.ToString("yyyy-MM-dd HH:mm");
+            var sizeText = isDirectory ? "" : FormatSize(size);
+            var dateText = modified == default ? "" : modified.ToString("yyyy-MM-dd HH:mm");
             var dot = name.LastIndexOf('.');
             var ext = dot > 0 ? name.Substring(dot).ToLowerInvariant() : "";
-            TypeText = isDirectory ? "文件夹" : (ext.Length > 0 ? ext.TrimStart('.').ToUpperInvariant() + " 文件" : "文件");
+            var typeText = isDirectory ? "文件夹" : (ext.Length > 0 ? ext.TrimStart('.').ToUpperInvariant() + " 文件" : "文件");
+            SizeText = textPool is null ? sizeText : textPool.Size(sizeText);
+            DateText = textPool is null ? dateText : textPool.Date(dateText);
+            TypeText = textPool is null ? typeText : textPool.Type(typeText);
             Glyph = GlyphFor(ext, isDirectory);
         }
 
         public string Name { get; }
-        public string FullPath { get; }
+        public string FullPath => Path.Combine(_dir, Name);
+        internal string DirPath => _dir;
         public bool IsDirectory { get; }
-        public ulong Size { get; }
-        public DateTime Modified { get; }
         public string SizeText { get; }
         public string DateText { get; }
         public string TypeText { get; }
@@ -131,7 +161,10 @@ namespace WinUI2Demo
         private const long FirstBatchMaxDelayMs = 25;
         private const long FirstBatchHardDeadlineMs = 100;
         private const long BatchIntervalMs = 500;
-        private const int MaxBatchItems = 20_000;
+        internal const int NormalBatchItems = 20_000;
+        internal const int OccludedBatchItems = 1_500;
+        /// <summary>单批上限；被遮挡时调小以减少枚举缓冲与一次 Reset 的驻留/停顿。</summary>
+        internal static volatile int MaxBatchItems = NormalBatchItems;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct FILETIME
@@ -223,6 +256,7 @@ namespace WinUI2Demo
             }
 
             var buffer = new List<FileEntry>(1024);
+            var textPool = new DisplayTextPool();
             var batchIndex = 0;
             var total = 0;
             var firstSent = false;
@@ -243,7 +277,7 @@ namespace WinUI2Demo
                         break;
                     }
 
-                    var entry = BuildEntry(path, ref data);
+                    var entry = BuildEntry(path, ref data, textPool);
                     if (entry is not null)
                     {
                         buffer.Add(entry);
@@ -321,7 +355,7 @@ namespace WinUI2Demo
             onDone(total, sw.ElapsedMilliseconds, error);
         }
 
-        private static unsafe FileEntry? BuildEntry(string dir, ref WIN32_FIND_DATAW data)
+        private static unsafe FileEntry? BuildEntry(string dir, ref WIN32_FIND_DATAW data, DisplayTextPool textPool)
         {
             fixed (char* p = data.cFileName)
             {
@@ -343,7 +377,7 @@ namespace WinUI2Demo
                 var modified = ft.dwLowDateTime == 0 && ft.dwHighDateTime == 0
                     ? default
                     : DateTime.FromFileTimeUtc(((long)ft.dwHighDateTime << 32) | ft.dwLowDateTime).ToLocalTime();
-                return new FileEntry(name, Path.Combine(dir, name), isDir, size, modified);
+                return new FileEntry(dir, name, isDir, size, modified, textPool);
             }
         }
     }

@@ -233,7 +233,12 @@ if (-not $script:isAdmin -and -not $NoElevate -and -not $Elevated) {
             Write-Fail "子进程报告成功但查不到已安装的 $script:pkgName"
             exit 1
         }
-        $script:summary += "提权：PASS（子进程退出码 $($child.ExitCode)）"
+        if ($child.ExitCode -eq 0) {
+            $script:summary += "提权：PASS（子进程退出码 0）"
+        }
+        else {
+            $script:summary += "提权：已执行但安装失败（子进程退出码 $($child.ExitCode)）"
+        }
         Write-Summary
         exit $child.ExitCode
     }
@@ -333,7 +338,10 @@ else {
     }
 }
 
-if ($signedInstalled) { Complete "签名安装（提权 + 机器级证书信任）" }
+if ($signedInstalled) {
+    if ($script:isAdmin) { Complete "签名安装（提权 + 机器级证书信任）" }
+    else { Complete "签名安装（证书已在机器级信任存储）" }
+}
 
 Write-Step "3/5 签名安装结果"
 if ($skipReason) { Write-Note "未走签名安装：$skipReason" }

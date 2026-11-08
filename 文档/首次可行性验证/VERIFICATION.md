@@ -11,6 +11,7 @@
 3. 嵌入桌面：DesktopFlyouts 原方案（置顶透明浮层）透明成立；额外用 `SetParent` 挂到 `Progman` 的子 `WorkerW` 后，**透明仍然成立**（左半透出壁纸，右半为 50% 红与壁纸混色）。
 4. WinUI 2 对照：**未打包进程激活失败（`0x80040154`），MSIX 打包后激活与渲染成立**。第 4 节记录的 `REGDB_E_CLASSNOTREG` 属“未打包前提”的阶段结论；按正式路线改为 MSIX（声明 `Microsoft.UI.Xaml.2.8` 框架包依赖）后，`XamlControlsResources`、`NavigationView`、`InfoBar` 均正常创建与渲染（详见第 5 节）。
 5. MSIX 打包后的透明复测：**岛级透明开关仍成立**（对照内容严格复现纯绿/壁纸透出），但以 `NavigationView` 为根时，其内容区模板自带 `#80FFFFFF`（50% 白）背景，画面是“50% 白 + 背景”的混色，不是纯壁纸色；这属于控件内容层，不是透明失效（详见 5.4）。
+6. `Frame` + `Page` 导航扩展性：**可用**。`DesktopWindowXamlSource.Content = Frame`、`Navigate(typeof(Page))` 成功且页面真实渲染；导航栈 A→B→返回正常，透明在导航前后不丢失。两个关键坑：默认 `NavigationCacheMode=Disabled` 时 `GoBack` 会**重新创建页面实例**（控件状态与滚动位置丢失，需 `Required` 或外部状态管理）；纯 C#（未进 XamlTypeInfo）的 Page 类型会让 `Navigate` 直接崩溃，页面须经 XAML 编译（详见第 6 节）。
 
 ---
 
@@ -340,7 +341,99 @@ Progman 0x1015C (visible)
 
 ---
 
-## 6. 复现方式
+## 6. Frame + Page 导航扩展性验证（新增）
+
+> 目的：确认岛里可以直接用 `Windows.UI.Xaml.Controls.Frame` + `Page` 做页面导航，为后续多页面（文件视图、设置页等）提供依据。
+> 工程：仍为 [src/WinUI2Probe](src/WinUI2Probe)，新增 `--content nav`；页面为 [PageA.xaml](src/WinUI2Probe/PageA.xaml) / [PageB.xaml](src/WinUI2Probe/PageB.xaml)（XAML 编译），代码见 [NavigationPages.cs](src/WinUI2Probe/NavigationPages.cs)。
+> 判据：页面顶部 40 DIP 色带（PageA=DodgerBlue `RGB(30,144,255)`，PageB=OrangeRed `RGB(255,69,0)`）证明当前页面真的渲染；中部左列保持透明、右列 50% 红沿用原像素判据；底部状态区用于返回后状态检查。
+
+### 6.1 实现方式
+
+```csharp
+var frame = new Windows.UI.Xaml.Controls.Frame();
+frame.Navigate(typeof(PageA), "param-A");   // 返回 true
+_dws.Content = frame;                        // Frame 直接作为岛根
+```
+
+自动化序列（`--content nav`，无需手动点按钮）：初始采样 → 修改 PageA 状态（TextBox 文本 + `ChangeView` 滚到 120）→ `Navigate(PageB)` 采样 → `GoBack()` 采样 → 放大宿主（640x440）验证 Frame 尺寸同步。
+
+### 6.2 导航、栈与渲染（打包，`artifacts/WinUI2Probe-topmost-off-20261108-151126.log`）
+
+```text
+[NAV] Navigate(PageA) => True content=WinUI2Probe.PageA backStack=0 canGoBack=False
+[NAV] Navigate(PageB) => True content=WinUI2Probe.PageB backStack=1 canGoBack=True
+[NAV] GoBack() called; content=WinUI2Probe.PageA backStack=0 canGoBack=False
+[PAGE-A] OnNavigatedTo #2 mode=Back param='param-A' Frame=Windows.UI.Xaml.Controls.Frame
+```
+
+| 阶段 | `Frame.Content` | `BackStackDepth` | `CanGoBack` | `nav_marker (320,80)` |
+|---|---|---|---|---|
+| 初始 | PageA | 0 | False | **RGB(30,144,255)**（PageA 色带） |
+| 导航到 B | PageB | 1 | True | **RGB(255,69,0)**（PageB 色带） |
+| GoBack | PageA | 0 | False | **RGB(30,144,255)**（回到 PageA） |
+
+- `Navigate` 返回 `True`，`Navigated` 事件中 `contentType` 与页面类型一致；页面真实渲染（色带像素与页面身份一一对应），不是只看返回值。
+- 返回时 `NavigationMode=Back`，`BackStackDepth` 0→1→0 正常。
+- 观察到的回调顺序：`Navigated(新页)` → 旧页 `OnNavigatedFrom` → 新页 `OnNavigatedTo`。
+
+### 6.3 返回后的状态保留：默认不保留（重要坑）
+
+| 运行 | `NavigationCacheMode` | 阶段 | PageA 实例数 | TextBox 文本 | 滚动偏移 |
+|---|---|---|---|---|---|
+| 默认 | `Disabled` | 导航前 | 1 | `A0-mutated` | 120.0 |
+| 默认 | `Disabled` | 返回后 | **2（新实例）** | **`state`（初始值）** | **0.0** |
+| `--navcache 1` | `Required` | 导航前 | 1 | `A0-mutated` | 120.0 |
+| `--navcache 1` | `Required` | 返回后 | **1（复用实例）** | **`A0-mutated`** | **120.0** |
+
+- 默认 `Disabled` 时，`Frame` 的后退栈保存的是“页面类型 + 参数”（`PageStackEntry`），**不保存页面实例**；`GoBack` 会重新构造 `PageA`（日志 `[PAGE-A] ctor instance=#2`），因此控件内容与滚动位置都回到初始值。这与文档对 `NavigationCacheMode` 的说明一致：需要缓存页面实例时应显式设置 `Required`/`Enabled`。
+- 设 `Required` 后同一实例被复用，`OnNavigatedTo` 仍会再次触发（计数 2），状态保留。
+- 实践含义：多页面应用不能依赖默认的页面实例状态；要么开启缓存，要么把状态放到 ViewModel/服务里（推荐后者，避免缓存与内存的副作用）。
+
+### 6.4 导航前后透明是否仍成立
+
+每次采样都在同一坐标（`(190,269)` 左透明区、`(450,269)` 50% 红区），覆盖导航全阶段。
+
+| 模式 / 开关 | 阶段 | 左透明区 | 右半 50% 红 | 结论 |
+|---|---|---|---|---|
+| topmost / `1` | 初始 / 到 B / 返回 | **RGB(0,255,0)** | **RGB(128,127,0)** | 三阶段完全一致，绿对照窗透出 |
+| topmost / `0` | 初始 / 到 B / 返回 | RGB(0,0,0) | RGB(128,0,0) | 三阶段一致，不透明（底色随主题） |
+| workerw / `1` | 初始 / 到 B / 返回 | **RGB(3,14,32)** | **RGB(132,12,25)** | 与启动前桌面基准同点逐通道一致 |
+| workerw / `0` | 初始 / 到 B / 返回 | RGB(255,255,255) | RGB(255,127,127) | 三阶段一致，不透明 |
+
+workerw 的交叉验算（同一轮启动前桌面基准图同点：左 `(3,14,32)`、右 `(8,24,50)`）：
+
+- 左：`(3,14,32)` 与基准**逐通道相同** → 壁纸真实透出。
+- 右：`0.5×红 + 0.5×基准` = `(131.5, 12, 25)`，实测 `(132,12,25)`，误差 ≤1。
+
+**结论：Frame/Page 切换不会破坏 `IXamlSourceTransparency` 的效果**；透明开关在导航全阶段保持。
+
+### 6.5 尺寸同步与资源解析
+
+- **Frame 尺寸随岛同步**：初始 `ActualWidth/ActualHeight = 346.7x253.3` DIP，与岛物理尺寸 520x380 @150% 换算值一致；把宿主放大到 640x440 后变为 `426.7x293.3`，`Frame.SizeChanged` 共 2 次（0→346.7→426.7）。
+- **页面级 `ResourceDictionary`**：`PageA.Resources["PageAOnlyBrush"]` 解析为 `SolidColorBrush #FF1E90FF`（XAML 中定义）。
+- **应用级主题资源**：`ApplicationPageBackgroundThemeBrush` 可解析，但取值随当前主题/上下文变化——打包运行观察到 Light `#FFF3F3F3` 与 Dark `#FF202020` 两种；未打包运行（无 `XamlControlsResources`）为 `#FF000000`。说明**主题资源查找本身可用**，具体颜色由活动主题决定，不能把它当作固定常量。
+- 页面 XAML 默认样式（TextBox 等）正常套用，说明页面级的主题字典查找链在岛内有效。
+
+### 6.6 常见坑与失败项（如实记录）
+
+1. **纯 C# Page 类型（未进入 XamlTypeInfo）会让导航崩溃**：第一次实现把 `PageA/PageB` 写成纯 C# 类（不编译 XAML），`Navigate` 时进程直接退出，日志停在 `[NAV] Navigating to ...`，**没有托管异常，也没有错误码**。改为 XAML 编译页面（`PageA.xaml`/`PageB.xaml` + `x:Class`，类型进入生成的 `XamlTypeInfo.g.cs`）后正常。  
+   推断（非文档逐字）：`Frame.Navigate(Type)` 需要 XAML 元数据提供者认识目标类型；没有 XAML 元数据时在原生层失败。**扩展新页面时务必用 XAML 编译**（或确保类型进入 `IXamlMetadataProvider`）。
+2. **UWP `Page` 没有 `NavigationService` 属性**：反射检查 `typeof(Page).GetProperty("NavigationService")` 返回 `null`（日志 `exists=False`）。WPF/Silverlight 的 `NavigationService` 概念在 UWP 中对应 `Page.Frame`；`OnNavigatedTo` 时 `Frame` 已可用、`BackStackDepth`/`CanGoBack` 可读。
+3. **`GoBack()` 返回 `void`**（不是 `Navigate` 那样返回 `bool`），只能通过 `Content`/`BackStackDepth`/`CanGoBack` 判断结果；本探针据此记录。
+4. **默认返回会重建页面**（6.3）：需要状态保留时必须显式缓存或外置状态。
+5. **`Window.Current` 在本宿主中非 null**：日志显示 `Window.Current=Window`（`WindowsXamlManager` + `CoreWindow` 路径）。因此“完全没有 `Window.Current` 的岛宿主”未能在本环境验证；`Frame`/`Page` 导航本身不依赖 `Window.Current` 的显式使用，但该场景属剩余待验证项。
+6. **未打包上下文**：同一份 Frame/Page 代码可正常导航与渲染（`artifacts/WinUI2Probe-topmost-on-20261108-151238.log`，标记 `[PKG] no package identity`），导航栈与状态行为一致；差异仅在 WinUI 2 主题资源仍报 `0x80040154`（与第 4/5 节一致），主题资源回退为 OS 默认值。**Frame/Page 属系统 UWP XAML，不依赖 MSIX 包标识**。
+
+### 6.7 局限
+
+- 页面内未做输入/焦点/命中测试；WorkerW 子窗的输入行为仍未验证（与 5.5/第 9 节同一限制）。
+- 未测试 `Frame.Navigate` 到“无效页面类型”的失败码；未测试多 Frame/多岛并发导航。
+- 未测试 `Frame` 的非默认缓存策略（`Enabled`）、`NavigationTransition`、页面 `OnNavigatingFrom` 取消等高级行为。
+- 截图在放大宿主之后拍摄，像素判定以日志中的分阶段采样为准（截图仅作辅助）。
+
+---
+
+## 7. 复现方式
 
 ```powershell
 # 1) 构建
@@ -380,13 +473,22 @@ powershell -ExecutionPolicy Bypass -File `
 powershell -ExecutionPolicy Bypass -File `
   "文档/首次可行性验证/scripts/run-probe.ps1" `
   -Probe WinUI2Probe -Mode topmost -Transparent on -Content grid -Packaged
+
+# 4c) Frame + Page 导航（自动 A→B→返回、分阶段采样；可加 -NavCache 做页面缓存对照）
+powershell -ExecutionPolicy Bypass -File `
+  "文档/首次可行性验证/scripts/run-probe.ps1" `
+  -Probe WinUI2Probe -Mode topmost -Transparent on -Content nav -Packaged
+
+powershell -ExecutionPolicy Bypass -File `
+  "文档/首次可行性验证/scripts/run-probe.ps1" `
+  -Probe WinUI2Probe -Mode workerw -Transparent on -Content nav -Packaged
 ```
 
-探针参数：`--mode topmost|plain|workerw`、`--content winui2|grid`、`--transparent 1|0`、`--log <path>`、`--hold <ms>`、`--capture <ms>`。`run-probe.ps1` 的 `-Packaged` 表示按已注册包的 AUMID 启动，而不是直接执行 exe。
+探针参数：`--mode topmost|plain|workerw`、`--content winui2|grid|nav`、`--transparent 1|0`、`--log <path>`、`--hold <ms>`、`--capture <ms>`、`--navcache 1`（仅 nav，PageA 用 `NavigationCacheMode.Required`）。`run-probe.ps1` 的 `-Packaged` 表示按已注册包的 AUMID 启动，而不是直接执行 exe。
 
 ---
 
-## 7. 证据文件
+## 8. 证据文件
 
 | 文件 | 内容 |
 |---|---|
@@ -396,6 +498,14 @@ powershell -ExecutionPolicy Bypass -File `
 | `artifacts/*.png` | 4 组截图与 700x500 裁剪图 |
 | `artifacts/WinUI2Probe-*.log` / `*.png` | WinUI 2 对照实验（未打包 4 组含 `0x80040154`；打包后 4 组 + `grid` 对照） |
 | `artifacts/WinUI2Probe-workerw-*-desktop.png` | WorkerW 模式启动前的无遮挡桌面基准图（透明判定用） |
+| `artifacts/WinUI2Probe-topmost-on-20261108-150218.log` | 首次失败证据：纯 C# Page（未进 `XamlTypeInfo`）在 `Navigating` 后进程退出，无托管异常 |
+| `artifacts/WinUI2Probe-topmost-on-20261108-150810.log` | Frame/Page 导航（打包，默认 `NavigationCacheMode=Disabled`，透明开） |
+| `artifacts/WinUI2Probe-topmost-off-20261108-151126.*` | 导航矩阵：topmost + 不透明（A→B→返回三阶段采样与状态） |
+| `artifacts/WinUI2Probe-topmost-on-20261108-151144.*` | 导航矩阵：topmost + 透明开 + `NavigationCacheMode=Required` |
+| `artifacts/WinUI2Probe-workerw-on-20261108-151203.*` / `-desktop.png` | 导航矩阵：WorkerW + 透明开 + 桌面基准 |
+| `artifacts/WinUI2Probe-workerw-off-20261108-151224.*` / `-desktop.png` | 导航矩阵：WorkerW + 不透明 |
+| `artifacts/WinUI2Probe-topmost-on-20261108-151238.*` | 未打包上下文下的 Frame/Page 导航对照（无包标识） |
+| [src/WinUI2Probe/PageA.xaml](src/WinUI2Probe/PageA.xaml) / [PageB.xaml](src/WinUI2Probe/PageB.xaml) / [NavigationPages.cs](src/WinUI2Probe/NavigationPages.cs) | 导航验证页与代码（XAML 编译，顶部色带 + 透明判据 + 状态区） |
 | [artifacts/msix-install-status.txt](artifacts/msix-install-status.txt) | 打包/安装结果：松散注册、包标识、签名失败原因 |
 | [src/WinUI2Probe/Package.appxmanifest](src/WinUI2Probe/Package.appxmanifest) | MSIX 清单（含 `Microsoft.UI.Xaml.2.8` 框架包依赖） |
 | [scripts/package-msix.ps1](scripts/package-msix.ps1) | 打包/签名/安装脚本 |
@@ -403,7 +513,7 @@ powershell -ExecutionPolicy Bypass -File `
 
 ---
 
-## 8. 局限与不确定项
+## 9. 局限与不确定项
 
 - 结果基于本机 Windows 11 Build 26300 / 150% DPI / 单屏 / 交互式会话；Win10 的 WorkerW 层级不同，WorkerW 部分需按当地窗口树重测。
 - 未使用任何 DWM 属性，且实测证明不需要；但未测试“有其他桌面工具（壁纸引擎、动态壁纸）同时挂 WorkerW”时的冲突。
@@ -411,3 +521,4 @@ powershell -ExecutionPolicy Bypass -File `
 - `IsBackgroundTransparent` 按官方文档对**当前线程所有** `DesktopWindowXamlSource` 生效；工程中每个进程只有一个岛，未做多岛对照。
 - WorkerW 中普通 GDI 子窗不参与合成的原因只做了现象级定位（DComp 内容可见、GDI 内容不可见），未进一步下钻 DWM/桌面合成内部实现。
 - WinUI 2 对照实验最初只证明了"未打包宿主无法激活 WinUI 2 控件"；MSIX 打包后已补充验证激活与渲染（第 5 节）。仍未验证的是**已签名 MSIX 的正式安装通道**（受管理员/证书信任限制），以及把 `NavigationViewContentBackground` 改为透明后的纯透明观感。
+- Frame/Page 导航未覆盖：无 `Window.Current` 的岛宿主、无效页面类型的失败码、`Frame` 的 `Enabled` 缓存策略与转场、页面 `OnNavigatingFrom` 取消、多岛/多 Frame 并发、页面内输入与命中测试、WorkerW 子窗中的导航交互（第 6.7 节）。

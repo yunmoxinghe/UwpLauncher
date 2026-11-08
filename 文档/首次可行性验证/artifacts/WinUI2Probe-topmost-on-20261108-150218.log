@@ -1,0 +1,23 @@
+﻿[15:02:20.951] === WinUI2Probe ===
+[15:02:20.970] pid=16620 os=Microsoft Windows NT 10.0.26300.0
+[15:02:20.971] RoInitialize(STA) => hr=0x00000001
+[15:02:21.072] [PKG] Package.Current fullName=WinUI2Probe_1.0.0.0_x64__rdz54j04exa60 family=WinUI2Probe_rdz54j04exa60
+[15:02:21.158] mode=topmost content=nav transparent=True hold=7000 captureAt=5000
+[15:02:21.308] WindowsXamlManager.InitializeForCurrentThread => True
+[15:02:21.317] Window.Current => Windows.UI.Xaml.Window
+[15:02:21.321] CoreWindow.GetForCurrentThread => Windows.UI.Core.CoreWindow
+[15:02:21.335] [CoreWindowInterop] hwnd=0x330626
+[15:02:21.490] [WINUI2] XamlControlsResources merged into Application.Resources
+[15:02:21.579] [WINUI2] resource NavigationViewContentBackground => SolidColorBrush color=#80FFFFFF opacity=1
+[15:02:21.620] [WINUI2] resource NavigationViewDefaultBackground lookup failed: COMException
+[15:02:21.620] [WINUI2] resource ApplicationPageBackgroundThemeBrush => SolidColorBrush color=#FFF3F3F3 opacity=1
+[15:02:21.627] [RegisterClass] backdrop atom=49937 lastErr=0
+[15:02:21.670] [CreateWindow] backdrop hwnd=0xF08BE lastErr=0
+[15:02:21.671] [RegisterClass] host atom=49935 lastErr=0
+[15:02:21.674] [CreateWindow] host hwnd=0x1500B8 exStyle=0x200088 lastErr=0
+[15:02:21.764] [DWS] created=True
+[15:02:21.778] [DWS] AttachToWindow(host) => 0x00000000
+[15:02:21.778] [DWS] island hwnd=0x3205BE
+[15:02:21.792] [CONTENT] nav: Windows.UI.Xaml.Controls.Frame + Page
+[15:02:21.800] [NAV] Frame created type=Windows.UI.Xaml.Controls.Frame
+[15:02:21.852] [NAV] Navigating to  mode=New backStack=0

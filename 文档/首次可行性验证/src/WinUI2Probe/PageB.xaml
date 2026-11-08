@@ -1,0 +1,45 @@
+<Page
+    x:Class="WinUI2Probe.PageB"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="40" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="96" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="#FFFF4500">
+            <TextBlock Text="PAGE B (OrangeRed band)" Foreground="White" FontSize="15"
+                       Margin="12,0,0,0" VerticalAlignment="Center" />
+        </Border>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Grid Grid.Column="0">
+                <TextBlock Text="TRANSPARENT REGION" Foreground="White" FontSize="13"
+                           Margin="12" VerticalAlignment="Top" />
+            </Grid>
+
+            <Border Grid.Column="1" Background="#80FF0000">
+                <TextBlock Text="50% RED" Foreground="White" FontSize="18"
+                           Margin="12" VerticalAlignment="Top" />
+            </Border>
+        </Grid>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <TextBox x:Name="StateBox" Grid.Column="0" Text="state" IsReadOnly="True"
+                     FontSize="12" Margin="8" VerticalAlignment="Top" />
+        </Grid>
+    </Grid>
+</Page>

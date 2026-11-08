@@ -1,0 +1,94 @@
+﻿[15:12:09.647] === WinUI2Probe ===
+[15:12:10.294] pid=14776 os=Microsoft Windows NT 10.0.26300.0
+[15:12:10.295] RoInitialize(STA) => hr=0x00000001
+[15:12:10.480] [PKG] Package.Current fullName=WinUI2Probe_1.0.0.0_x64__rdz54j04exa60 family=WinUI2Probe_rdz54j04exa60
+[15:12:10.605] mode=workerw content=nav transparent=True hold=7000 captureAt=5000
+[15:12:10.934] WindowsXamlManager.InitializeForCurrentThread => True
+[15:12:10.942] Window.Current => Windows.UI.Xaml.Window
+[15:12:10.948] CoreWindow.GetForCurrentThread => Windows.UI.Core.CoreWindow
+[15:12:11.013] [CoreWindowInterop] hwnd=0x12306AC
+[15:12:11.225] [WINUI2] XamlControlsResources merged into Application.Resources
+[15:12:11.302] [WINUI2] resource NavigationViewContentBackground => SolidColorBrush color=#4C3A3A3A opacity=1
+[15:12:11.320] [WINUI2] resource NavigationViewDefaultBackground lookup failed: COMException
+[15:12:11.321] [WINUI2] resource ApplicationPageBackgroundThemeBrush => SolidColorBrush color=#FF202020 opacity=1
+[15:12:11.330] [RegisterClass] backdrop atom=49762 lastErr=0
+[15:12:11.366] [CreateWindow] backdrop hwnd=0x707B6 lastErr=0
+[15:12:11.367] [RegisterClass] host atom=49795 lastErr=0
+[15:12:11.370] [CreateWindow] host hwnd=0x3B0840 exStyle=0x200080 lastErr=0
+[15:12:11.404] [DWS] created=True
+[15:12:11.419] [DWS] AttachToWindow(host) => 0x00000000
+[15:12:11.420] [DWS] island hwnd=0x1C0DB2
+[15:12:11.427] [CONTENT] nav: Windows.UI.Xaml.Controls.Frame + Page
+[15:12:11.432] [NAV] Frame created type=Windows.UI.Xaml.Controls.Frame
+[15:12:11.540] [NAV] Navigating to WinUI2Probe.PageA mode=New backStack=0
+[15:12:11.628] [PAGE-A] ctor instance=#1 Frame=NULL Page.NavigationService property exists=False cacheMode=Disabled
+[15:12:11.630] [PAGE-A] page resource PageAOnlyBrush => SolidColorBrush #FF1E90FF
+[15:12:11.630] [PAGE-A] theme resource ApplicationPageBackgroundThemeBrush => SolidColorBrush #FF202020
+[15:12:11.637] [NAV] Navigated to WinUI2Probe.PageA mode=New contentType=WinUI2Probe.PageA backStack=0 canGoBack=False
+[15:12:11.641] [PAGE-A] OnNavigatedTo #1 mode=New param='param-A' Frame=Windows.UI.Xaml.Controls.Frame backStack=0 canGoBack=False Window.Current=Window
+[15:12:11.643] [NAV] Navigate(PageA) => True content=WinUI2Probe.PageA backStack=0 canGoBack=False
+[15:12:11.648] [DWS] Content set
+[15:12:11.651] [DWS] island sized to 520x380
+[15:12:11.655] [XST] set_IsBackgroundTransparent(True) => hr=0x00000000 readback=True
+[15:12:11.656] host dpi=144 coreHwnd=0x12306AC xamlHwnd=0x1C0DB2
+[15:12:11.658] [WORKERW] Progman=0x1015C
+[15:12:11.659] [WORKERW] SendMessage(Progman, 0x052C, 0, 0) => 0x0
+[15:12:11.661] [WORKERW] Progman child WorkerW=0xC07D8 valid=True visible=True
+[15:12:11.667] [REPARENT] hwnd=0x707B6 oldParent=0x1000C newParent=0xC07D8 style=0x54000000 exStyle=0x8000080 lastErr=0
+[15:12:11.669] [REPARENT] hwnd=0x3B0840 oldParent=0x1000C newParent=0xC07D8 style=0x44000000 exStyle=0x200080 lastErr=0
+[15:12:11.672] [WORKERW] parent=0xC07D8 hostIsChild=True backdropIsChild=True
+[15:12:11.673] [SHOW] hostVisible=True xamlVisible=True backdropVisible=True
+[15:12:11.674] [RECT] host screen=(60,60,580,440)
+[15:12:11.675] [RECT] island screen=(60,60,580,440) root=0x1015C
+[15:12:11.791] [NAV] Frame.SizeChanged #1 new=346.7x253.3 previous=0.0x0.0
+[15:12:12.587] [NAV] phase=initial frameContent=WinUI2Probe.PageA backStack=0 canGoBack=False
+[15:12:12.590] [NAV-STATE] phase=initial content=WinUI2Probe.PageA pageA.instances=1 navigatedTo=1 navigatedFrom=0 text='A0-initial' scrollOffset=0.0 extent=528.0 viewport=80.0 frameContentIsPageA=True
+[15:12:12.592] [SAMPLE] phase=nav-initial
+[15:12:12.592] [SAMPLE] dpi=144 hostRect=(60,60,520x380) backdrop=(20,20,600x460)
+[15:12:12.611] [SAMPLE] transparent_left (190,269) COLORREF=0x00200E03 RGB=(3,14,32)
+[15:12:12.626] [SAMPLE] semi_red_right (450,269) COLORREF=0x00190C84 RGB=(132,12,25)
+[15:12:12.642] [SAMPLE] host_top_left (65,65) COLORREF=0x00FF901E RGB=(30,144,255)
+[15:12:12.659] [SAMPLE] backdrop_outside (30,30) COLORREF=0x00190A01 RGB=(1,10,25)
+[15:12:12.675] [SAMPLE] desktop_reference (10,700) COLORREF=0x00200E03 RGB=(3,14,32)
+[15:12:12.691] [SAMPLE] nav_marker (320,80) COLORREF=0x00FF901E RGB=(30,144,255)
+[15:12:13.103] [NAV-STATE] phase=before-navigate content=WinUI2Probe.PageA pageA.instances=1 navigatedTo=1 navigatedFrom=0 text='A0-mutated' scrollOffset=120.0 extent=528.0 viewport=80.0 frameContentIsPageA=True
+[15:12:13.104] [NAV] scroll requested=120 actual=120.0 extent=528.0 viewport=80.0
+[15:12:13.105] [NAV] Navigating to WinUI2Probe.PageB mode=New backStack=0
+[15:12:13.113] [PAGE-B] ctor instance=#1 Frame=NULL
+[15:12:13.125] [NAV] Navigated to WinUI2Probe.PageB mode=New contentType=WinUI2Probe.PageB backStack=1 canGoBack=True
+[15:12:13.133] [PAGE-A] OnNavigatedFrom #1 mode=New text='A0-mutated' scrollOffset=120.0
+[15:12:13.139] [PAGE-B] OnNavigatedTo #1 mode=New param='param-B' Frame=Windows.UI.Xaml.Controls.Frame backStack=1 canGoBack=True
+[15:12:13.142] [NAV] Navigate(PageB) => True content=WinUI2Probe.PageB backStack=1 canGoBack=True
+[15:12:14.058] [NAV-STATE] phase=after-navigate-b content=WinUI2Probe.PageB pageA.instances=1 navigatedTo=1 navigatedFrom=1 text='A0-mutated' scrollOffset=120.0 extent=528.0 viewport=80.0 frameContentIsPageA=False
+[15:12:14.058] [SAMPLE] phase=nav-b
+[15:12:14.058] [SAMPLE] dpi=144 hostRect=(60,60,520x380) backdrop=(20,20,600x460)
+[15:12:14.075] [SAMPLE] transparent_left (190,269) COLORREF=0x00200E03 RGB=(3,14,32)
+[15:12:14.091] [SAMPLE] semi_red_right (450,269) COLORREF=0x00190C84 RGB=(132,12,25)
+[15:12:14.107] [SAMPLE] host_top_left (65,65) COLORREF=0x000045FF RGB=(255,69,0)
+[15:12:14.124] [SAMPLE] backdrop_outside (30,30) COLORREF=0x00190A01 RGB=(1,10,25)
+[15:12:14.142] [SAMPLE] desktop_reference (10,700) COLORREF=0x00200E03 RGB=(3,14,32)
+[15:12:14.158] [SAMPLE] nav_marker (320,80) COLORREF=0x000045FF RGB=(255,69,0)
+[15:12:14.159] [NAV] Navigating to WinUI2Probe.PageA mode=Back backStack=1
+[15:12:14.164] [PAGE-A] ctor instance=#2 Frame=NULL Page.NavigationService property exists=False cacheMode=Disabled
+[15:12:14.164] [PAGE-A] page resource PageAOnlyBrush => SolidColorBrush #FF1E90FF
+[15:12:14.164] [PAGE-A] theme resource ApplicationPageBackgroundThemeBrush => SolidColorBrush #FF202020
+[15:12:14.165] [NAV] Navigated to WinUI2Probe.PageA mode=Back contentType=WinUI2Probe.PageA backStack=0 canGoBack=False
+[15:12:14.165] [PAGE-B] OnNavigatedFrom mode=Back
+[15:12:14.165] [PAGE-A] OnNavigatedTo #2 mode=Back param='param-A' Frame=Windows.UI.Xaml.Controls.Frame backStack=0 canGoBack=False Window.Current=Window
+[15:12:14.166] [NAV] GoBack() called; content=WinUI2Probe.PageA backStack=0 canGoBack=False
+[15:12:15.070] [NAV-STATE] phase=after-back content=WinUI2Probe.PageA pageA.instances=2 navigatedTo=2 navigatedFrom=1 text='state' scrollOffset=0.0 extent=528.0 viewport=80.0 frameContentIsPageA=True
+[15:12:15.070] [SAMPLE] phase=nav-back
+[15:12:15.070] [SAMPLE] dpi=144 hostRect=(60,60,520x380) backdrop=(20,20,600x460)
+[15:12:15.091] [SAMPLE] transparent_left (190,269) COLORREF=0x00200E03 RGB=(3,14,32)
+[15:12:15.107] [SAMPLE] semi_red_right (450,269) COLORREF=0x00190C84 RGB=(132,12,25)
+[15:12:15.124] [SAMPLE] host_top_left (65,65) COLORREF=0x00FF901E RGB=(30,144,255)
+[15:12:15.141] [SAMPLE] backdrop_outside (30,30) COLORREF=0x00190A01 RGB=(1,10,25)
+[15:12:15.158] [SAMPLE] desktop_reference (10,700) COLORREF=0x00200E03 RGB=(3,14,32)
+[15:12:15.175] [SAMPLE] nav_marker (320,80) COLORREF=0x00FF901E RGB=(30,144,255)
+[15:12:15.176] [NAV] frame size pre-resize actual=346.7x253.3 islandDIP=346.7x253.3
+[15:12:15.192] [NAV] Frame.SizeChanged #2 new=426.7x293.3 previous=346.7x253.3
+[15:12:16.087] [NAV] frame size post-resize actual=426.7x293.3 hostClientPx=640x440 expectedDIP=426.7x293.3 sizeChangedEvents=2
+[15:12:16.087] [RECT] host screen=(60,60,700,500)
+[15:12:16.087] [RECT] island screen=(60,60,700,500) root=0x1015C
+[15:12:18.882] [CLEANUP] DesktopWindowXamlSource disposed
+[15:12:18.888] [CLEANUP] windows destroyed

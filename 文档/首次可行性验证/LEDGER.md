@@ -172,3 +172,35 @@ XAML 内容：左右两列，左列无背景，右列 50% 红（`#80FF0000`）�
 - `artifacts/WinUI2Probe-workerw-on-20261108-143452.log` / `workerw-off-20261108-143517.log`
 - `artifacts/WinUI2Probe-workerw-on-20261108-143532.log`（grid 对照）及同名 `-desktop.png`
 - `artifacts/msix-install-status.txt` / `artifacts/msix/package.log`（后者为临时目录，git 忽略）
+
+---
+
+## 阶段 6：Frame + Page 导航扩展性（新增）
+
+工程：`WinUI2Probe` 新增 `--content nav`；页面 `PageA.xaml` / `PageB.xaml`（XAML 编译，类型进入 `XamlTypeInfo`）+ `NavigationPages.cs`。自动化序列：初始 → 改 PageA 状态（文本 + 滚动 120）→ `Navigate(PageB)` → `GoBack` → 放大宿主，全阶段像素采样。
+
+### 结果
+
+- `DesktopWindowXamlSource.Content = Windows.UI.Xaml.Controls.Frame`；`Navigate(PageA)` 返回 `True`，页面真实渲染：顶部色带像素 A=`RGB(30,144,255)`、B=`RGB(255,69,0)`、返回后 A=`RGB(30,144,255)`。
+- 导航栈正常：`BackStackDepth` 0→1→0，`CanGoBack` False→True→False，返回 `NavigationMode=Back`；`OnNavigatedTo` 能读到 `Frame`、参数与栈状态。
+- **状态保留坑**：默认 `NavigationCacheMode=Disabled` 时 `GoBack` 重建页面（实例数 1→2），`text` 由 `A0-mutated` 回到 `state`、滚动由 120 回到 0；`--navcache 1`（`Required`）时复用实例（1→1），文本与滚动位置保留。
+- **透明保持**：topmost 开 三阶段均 `(0,255,0)` / `(128,127,0)`；workerw 开 三阶段均 `(3,14,32)` / `(132,12,25)`，与启动前桌面基准同点逐通道一致，右半 `132 ≈ 0.5×255 + 0.5×8`（G/B 误差 ≤1）。
+- **尺寸同步**：`Frame` 初始 `346.7x253.3` DIP = 岛 520x380 @150%；宿主放大到 640x440 后 `426.7x293.3`，`SizeChanged` 2 次。
+- **资源解析**：页面级 `PageAOnlyBrush=#FF1E90FF` 可解析；应用级 `ApplicationPageBackgroundThemeBrush` 可解析（打包观察到 Light `#FFF3F3F3` / Dark `#FF202020`；未打包 `#FF000000`）。
+- **常见坑**：纯 C# Page（未进 `XamlTypeInfo`）会让 `Frame.Navigate` 直接崩溃（日志停在 `Navigating`，无托管异常/错误码），改为 XAML 编译页面后正常（推断：需 XAML 元数据提供者认识目标类型）；UWP `Page` **没有** `NavigationService` 属性（等价物 `Page.Frame`）；`GoBack()` 返回 `void`。
+- **打包 vs 未打包**：Frame/Page 属系统 UWP XAML，两种上下文都能导航与渲染、行为一致；差异仅在未打包时 WinUI 2 主题资源仍报 `0x80040154`（阶段 4/5 结论不变）。
+
+### 证据文件
+
+- `artifacts/WinUI2Probe-topmost-on-20261108-150810.log`（打包，默认缓存，透明开）
+- `artifacts/WinUI2Probe-topmost-off-20261108-151126.log`（不透明对照 + 三阶段状态）
+- `artifacts/WinUI2Probe-topmost-on-20261108-151144.log`（`Required` 缓存对照）
+- `artifacts/WinUI2Probe-workerw-on-20261108-151203.log` / `-desktop.png`（壁纸基准 + 混色验算）
+- `artifacts/WinUI2Probe-workerw-off-20261108-151224.log` / `-desktop.png`
+- `artifacts/WinUI2Probe-topmost-on-20261108-151238.log`（未打包上下文对照）
+
+### 剩余待验证（阶段 6 范围内）
+
+- 无 `Window.Current` 的岛宿主（本宿主 `Window.Current` 非 null）
+- 无效页面类型的失败码、`Frame` 的 `Enabled` 缓存策略/转场、`OnNavigatingFrom` 取消、多岛并发
+- 页面内输入/焦点/命中测试（含 WorkerW 子窗）

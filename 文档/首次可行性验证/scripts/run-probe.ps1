@@ -30,12 +30,15 @@ param(
     [int]$HoldMs = 5000,
     [int]$CaptureAtMs = 2500,
 
-    # 岛内容：winui2（NavigationView + InfoBar）/ grid（对照诊断，仅原判据布局）
-    [ValidateSet("winui2", "grid")]
+    # 岛内容：winui2（NavigationView + InfoBar）/ grid（对照诊断，仅原判据布局）/ nav（Frame + Page 导航）
+    [ValidateSet("winui2", "grid", "nav")]
     [string]$Content = "winui2",
 
     # 以已注册的 MSIX 包身份启动（需要先运行 package-msix.ps1 -Install）
-    [switch]$Packaged
+    [switch]$Packaged,
+
+    # 仅 nav 内容：把 PageA 的 NavigationCacheMode 设为 Required（对照默认 Disabled）
+    [switch]$NavCache
 )
 
 $ErrorActionPreference = "Stop"
@@ -121,7 +124,7 @@ public static class PackagedProbeLauncher
     }
 
     $aumid = "$($pkg.PackageFamilyName)!App"
-    $arguments = "--mode $Mode --content $Content --transparent $flag --log $log --hold $HoldMs --capture $CaptureAtMs"
+    $arguments = "--mode $Mode --content $Content --transparent $flag --log $log --hold $HoldMs --capture $CaptureAtMs$(if ($NavCache) { ' --navcache 1' })"
     $processId = [PackagedProbeLauncher]::Activate($aumid, $arguments)
     return Get-Process -Id ([int]$processId)
 }
@@ -131,14 +134,16 @@ try {
         $p = Start-PackagedProbe
     }
     else {
-        $p = Start-Process -FilePath $exe -ArgumentList @(
+        $argList = @(
             "--mode", $Mode,
             "--content", $Content,
             "--transparent", $flag,
             "--log", $log,
             "--hold", "$HoldMs",
             "--capture", "$CaptureAtMs"
-        ) -PassThru
+        )
+        if ($NavCache) { $argList += @("--navcache", "1") }
+        $p = Start-Process -FilePath $exe -ArgumentList $argList -PassThru
     }
 
     Start-Sleep -Milliseconds ($CaptureAtMs + 900)

@@ -60,6 +60,9 @@ namespace WinUI2Probe
         private static bool _transparent = true;
         private static int _holdMs = 4000;
         private static int _captureAtMs = 2500;
+        private static bool _navCache;
+
+        internal static bool NavCacheRequested => _navCache;
 
         private static readonly HWND InsertAfterTop = new(IntPtr.Zero);
         private static readonly HWND InsertAfterBottom = new((IntPtr)1);
@@ -71,6 +74,8 @@ namespace WinUI2Probe
         private static HWND _workerW = HWND.Null;
         private static DesktopWindowXamlSource? _dws;
         private static IDesktopWindowXamlSourceNative2? _native2;
+        private static Frame? _frame;
+        private static int _frameSizeChangedCount;
 
         [DllImport("gdi32.dll")]
         private static extern IntPtr CreateSolidBrush(uint colorRef);
@@ -135,6 +140,10 @@ namespace WinUI2Probe
             var capture = GetArgValue(args, "--capture");
             if (int.TryParse(capture, out var captureValue))
                 _captureAtMs = captureValue;
+
+            var navCache = GetArgValue(args, "--navcache");
+            _navCache = !string.IsNullOrEmpty(navCache) &&
+                        (navCache == "1" || navCache!.Equals("true", StringComparison.OrdinalIgnoreCase));
         }
 
         private static string? GetArgValue(string[] args, string name)
@@ -180,9 +189,18 @@ namespace WinUI2Probe
 
                 ShowWindows();
 
-                Pump(_captureAtMs);
-                CaptureSamples();
-                Pump(Math.Max(0, _holdMs - _captureAtMs));
+                var sw = Stopwatch.StartNew();
+                if (_content == "nav")
+                {
+                    RunNavigationSequence();
+                }
+                else
+                {
+                    Pump(_captureAtMs);
+                    CaptureSamples();
+                }
+
+                Pump(Math.Max(0, _holdMs - (int)sw.ElapsedMilliseconds));
             }
             catch (Exception ex)
             {
@@ -374,6 +392,13 @@ namespace WinUI2Probe
                 return BuildSamplingLayout();
             }
 
+            if (_content == "nav")
+            {
+                // 扩展性验证：Frame + Page（Windows.UI.Xaml 自带的导航控件）
+                Log("[CONTENT] nav: Windows.UI.Xaml.Controls.Frame + Page");
+                return BuildNavigationContent();
+            }
+
             // 实验目标：直接以 WinUI 2 控件（Microsoft.UI.Xaml.Controls）作为 DesktopWindowXamlSource.Content。
             Microsoft.UI.Xaml.Controls.NavigationView nav;
             try
@@ -429,6 +454,128 @@ namespace WinUI2Probe
                     Log($"[WINUI2] inner: {ex.InnerException.GetType().FullName} hr=0x{ex.InnerException.HResult:X8} msg={ex.InnerException.Message}");
                 return null;
             }
+        }
+
+        private static Frame? BuildNavigationContent()
+        {
+            try
+            {
+                var frame = new Frame();
+                Log($"[NAV] Frame created type={frame.GetType().FullName}");
+
+                frame.Navigating += (_, e) =>
+                    Log($"[NAV] Navigating to {e.SourcePageType?.FullName} mode={e.NavigationMode} backStack={frame.BackStackDepth}");
+                frame.Navigated += (_, e) =>
+                {
+                    var content = e.Content;
+                    Log($"[NAV] Navigated to {e.SourcePageType?.FullName} mode={e.NavigationMode} " +
+                        $"contentType={content?.GetType().FullName ?? "NULL"} backStack={frame.BackStackDepth} canGoBack={frame.CanGoBack}");
+                };
+                frame.NavigationFailed += (_, e) =>
+                    Log($"[NAV] NavigationFailed to {e.SourcePageType?.FullName}: " +
+                        $"exception={e.Exception?.GetType().FullName} hr=0x{e.Exception?.HResult:X8} msg={e.Exception?.Message}");
+                frame.NavigationStopped += (_, e) =>
+                    Log($"[NAV] NavigationStopped to {e.SourcePageType?.FullName}");
+                frame.SizeChanged += (_, e) =>
+                {
+                    _frameSizeChangedCount++;
+                    Log($"[NAV] Frame.SizeChanged #{_frameSizeChangedCount} " +
+                        $"new={e.NewSize.Width:F1}x{e.NewSize.Height:F1} previous={e.PreviousSize.Width:F1}x{e.PreviousSize.Height:F1}");
+                };
+
+                var ok = frame.Navigate(typeof(PageA), "param-A");
+                Log($"[NAV] Navigate(PageA) => {ok} content={frame.Content?.GetType().FullName ?? "NULL"} " +
+                    $"backStack={frame.BackStackDepth} canGoBack={frame.CanGoBack}");
+
+                _frame = frame;
+                return frame;
+            }
+            catch (Exception ex)
+            {
+                Log($"[NAV] Frame setup FAILED: {ex.GetType().FullName} hr=0x{ex.HResult:X8} msg={ex.Message}");
+                if (ex.InnerException is not null)
+                    Log($"[NAV] inner: {ex.InnerException.GetType().FullName} hr=0x{ex.InnerException.HResult:X8} msg={ex.InnerException.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 导航序列：A → B → 返回 A，每个阶段做一次像素采样，并记录导航栈与页面状态。
+        /// 最后放大宿主窗口，验证 Frame 尺寸随岛尺寸同步。
+        /// </summary>
+        private static void RunNavigationSequence()
+        {
+            Pump(900);
+            Log($"[NAV] phase=initial frameContent={_frame?.Content?.GetType().FullName ?? "NULL"} " +
+                $"backStack={_frame?.BackStackDepth} canGoBack={_frame?.CanGoBack}");
+            LogPageState("initial");
+            CaptureSamples("nav-initial");
+
+            var pageA = PageA.Last;
+            if (pageA is null)
+            {
+                Log("[NAV] PageA instance missing, abort navigation sequence");
+                return;
+            }
+
+            // 可观测状态：改 TextBox 文本 + 滚动到 120
+            pageA.State.Text = "A0-mutated";
+            pageA.Scroll.ChangeView(null, 120, null, true);
+            Pump(400);
+            LogPageState("before-navigate");
+            Log($"[NAV] scroll requested=120 actual={pageA.Scroll.VerticalOffset:F1} " +
+                $"extent={pageA.Scroll.ExtentHeight:F1} viewport={pageA.Scroll.ViewportHeight:F1}");
+
+            var navOk = _frame!.Navigate(typeof(PageB), "param-B");
+            Log($"[NAV] Navigate(PageB) => {navOk} content={_frame.Content?.GetType().FullName ?? "NULL"} " +
+                $"backStack={_frame.BackStackDepth} canGoBack={_frame.CanGoBack}");
+            Pump(900);
+            LogPageState("after-navigate-b");
+            CaptureSamples("nav-b");
+
+            // UWP 的 Frame.GoBack() 返回 void，只能通过导航栈与内容类型判断结果
+            _frame.GoBack();
+            Log($"[NAV] GoBack() called; content={_frame.Content?.GetType().FullName ?? "NULL"} " +
+                $"backStack={_frame.BackStackDepth} canGoBack={_frame.CanGoBack}");
+            Pump(900);
+            LogPageState("after-back");
+            CaptureSamples("nav-back");
+
+            var dpi = PInvoke.GetDpiForWindow(_host);
+            var scale = dpi / 96.0;
+            Log($"[NAV] frame size pre-resize actual={_frame.ActualWidth:F1}x{_frame.ActualHeight:F1} " +
+                $"islandDIP={HostW / scale:F1}x{HostH / scale:F1}");
+
+            PInvoke.SetWindowPos(
+                _host, HWND.Null, HostX, HostY, 640, 440,
+                SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE |
+                SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW |
+                SET_WINDOW_POS_FLAGS.SWP_NOZORDER);
+            Pump(900);
+
+            RECT rc;
+            PInvoke.GetClientRect(_host, &rc);
+            Log($"[NAV] frame size post-resize actual={_frame.ActualWidth:F1}x{_frame.ActualHeight:F1} " +
+                $"hostClientPx={rc.right - rc.left}x{rc.bottom - rc.top} expectedDIP={(rc.right - rc.left) / scale:F1}x{(rc.bottom - rc.top) / scale:F1} " +
+                $"sizeChangedEvents={_frameSizeChangedCount}");
+            LogRects();
+        }
+
+        private static void LogPageState(string phase)
+        {
+            var pageA = PageA.Last;
+            var contentType = _frame?.Content?.GetType().FullName ?? "NULL";
+            if (pageA is null)
+            {
+                Log($"[NAV-STATE] phase={phase} content={contentType} pageA=NULL");
+                return;
+            }
+
+            Log($"[NAV-STATE] phase={phase} content={contentType} " +
+                $"pageA.instances={PageA.InstanceCount} navigatedTo={PageA.NavigatedToCount} navigatedFrom={PageA.NavigatedFromCount} " +
+                $"text='{pageA.State.Text}' scrollOffset={pageA.Scroll.VerticalOffset:F1} " +
+                $"extent={pageA.Scroll.ExtentHeight:F1} viewport={pageA.Scroll.ViewportHeight:F1} " +
+                $"frameContentIsPageA={ReferenceEquals(_frame?.Content, pageA)}");
         }
 
         private static Grid BuildSamplingLayout()
@@ -677,7 +824,7 @@ namespace WinUI2Probe
             }
         }
 
-        private static void CaptureSamples()
+        private static void CaptureSamples(string? phase = null)
         {
             var hdc = GetDC(IntPtr.Zero);
             if (hdc == IntPtr.Zero)
@@ -689,6 +836,8 @@ namespace WinUI2Probe
             try
             {
                 var dpi = PInvoke.GetDpiForWindow(_host);
+                if (phase is not null)
+                    Log($"[SAMPLE] phase={phase}");
                 Log($"[SAMPLE] dpi={dpi} hostRect=({HostX},{HostY},{HostW}x{HostH}) backdrop=({BackX},{BackY},{BackW}x{BackH})");
 
                 Sample(hdc, "transparent_left", HostX + HostW / 4, HostY + HostH * 55 / 100);
@@ -696,8 +845,16 @@ namespace WinUI2Probe
                 Sample(hdc, "host_top_left", HostX + 5, HostY + 5);
                 Sample(hdc, "backdrop_outside", BackX + 10, BackY + 10);
                 Sample(hdc, "desktop_reference", 10, 700);
-                // WinUI 2 专属控件（InfoBar）右上角留白处：用于证明内容确实由 Microsoft.UI.Xaml 渲染
-                Sample(hdc, "winui2_infobar", HostX + 420, HostY + 30);
+                if (_content == "nav")
+                {
+                    // 顶部 40 DIP 色带：PageA=DodgerBlue / PageB=OrangeRed，用于证明当前页面确实渲染
+                    Sample(hdc, "nav_marker", HostX + HostW / 2, HostY + 20);
+                }
+                if (_content == "winui2")
+                {
+                    // WinUI 2 专属控件（InfoBar）右上角留白处：用于证明内容确实由 Microsoft.UI.Xaml 渲染
+                    Sample(hdc, "winui2_infobar", HostX + 420, HostY + 30);
+                }
             }
             finally
             {
@@ -782,10 +939,11 @@ namespace WinUI2Probe
 
         private static string Hx(HWND hwnd) => hwnd.IsNull ? "0" : ((nint)hwnd.Value).ToString("X");
 
-        private static void Log(string message)
+        internal static void Log(string message)
         {
             var line = $"[{DateTime.Now:HH:mm:ss.fff}] {message}";
             _log.WriteLine(line);
         }
     }
 }
+
